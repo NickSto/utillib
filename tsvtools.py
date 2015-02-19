@@ -2,21 +2,29 @@
 from __future__ import division
 
 
-def read_tsv(infile):
+def read_tsv(infile, labels=None):
   """Read a tsv, returning a list of rows, each represented by a dict mapping
-  column labels to values. The first line of the tsv is assumed to be a header
-  with the column labels. Starting #'s are not removed from the header.
-  Input argument is an opened file-like object (like a file or sys.stdin)."""
-  rows = []
+  column labels to values. If no labels are given, the first line of the tsv is
+  assumed to be a header with the column labels. Starting #'s are not removed
+  from the header.
+  Input argument is an opened file-like object (like a file or sys.stdin).
+  Labels must be a list of label strings."""
+  # If labels were given, build mapping between them and column numbers.
   columns = {}
-  header = True
+  if labels:
+    for (col, field) in enumerate(labels):
+      columns[field] = col
+    in_header = False
+  else:
+    in_header = True
+  rows = []
   for line in infile:
     # Build columns dict, mapping column labels to column numbers.
     fields = line.rstrip('\r\n').split('\t')
-    if header:
+    if in_header:
       for (col, field) in enumerate(fields):
         columns[field] = col
-      header = False
+      in_header = False
       continue
     # Build a dict for a row, mapping column labels to values.
     row = {}
