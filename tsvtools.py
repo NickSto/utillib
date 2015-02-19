@@ -37,19 +37,21 @@ def read_tsv(infile, labels=None):
   return rows
 
 
-def table2dictlist(rows, key_label):
-  """Take a table like that returned by read_tsv() and turn it into a dict
-  mapping values in the "key_label" column to lists of rows with that value."""
+def table2dictlist(rows, key_label, key_label2=None):
+  """Take a table like that returned by read_tsv() and turn it into a dict mapping values in the
+  "key_label" column to lists of rows with that value. If key_label2 is provided, that is used as
+  an alternative key column to be used in the case where the first column is not present or empty
+  (empty string). If both are missing, the row is skipped."""
   dictlist = {}
   for row in rows:
-    try:
-      key = row[key_label]
-    except KeyError:
-      # If the row doesn't contain the key column, silently skip it.
-      continue
-    # Special-case samples table when the family field is blank (use mother).
-    if key == '' and key_label == 'family':
-      key = row['mother']
+    # Try to get the value of the key column.
+    # If the column is not present or empty, try the alternative key column (key_label2) if it's
+    # given. If that doesn't work, silently skip the row.
+    key = row.get(key_label)
+    if key is None or key == '' and key_label2 is not None:
+      key = row.get(key_label2)
+      if key is None or key == '' and key_label2 is not None:
+        continue
     rowlist = dictlist.get(key, [])
     rowlist.append(row)
     dictlist[key] = rowlist
