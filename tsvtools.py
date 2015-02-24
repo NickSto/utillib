@@ -40,8 +40,8 @@ def read_tsv(infile, labels=None):
 def table2dict(rows, key_label, key_label2=None):
   """Take a table like that returned by read_tsv() and turn it into a dict mapping values in the
   "key_label" column to the row with that value. If key_label2 is provided, that is used as
-  an alternative key column to be used in the case where the first column is not present or empty
-  (empty string). If both are missing, the row is skipped.
+  an alternative key column to be used in the case where the first column is null (not present,
+  empty string, or "."). If both are missing, the row is skipped.
   N.B.: The input table must use "key_label" as a unique key for each row!"""
   rowdict = {}
   for row in rows:
@@ -49,9 +49,9 @@ def table2dict(rows, key_label, key_label2=None):
     # If the column is not present or empty, try the alternative key column (key_label2) if it's
     # given. If that doesn't work, silently skip the row.
     key = row.get(key_label)
-    if key is None or key == '' and key_label2 is not None:
+    if key is None or key == '' or key == '.' and key_label2 is not None:
       key = row.get(key_label2)
-      if key is None or key == '' and key_label2 is not None:
+      if key is None or key == '' or key == '.' and key_label2 is not None:
         continue
     rowdict[key] = row
   return rowdict
@@ -60,17 +60,17 @@ def table2dict(rows, key_label, key_label2=None):
 def table2dictlist(rows, key_label, key_label2=None):
   """Take a table like that returned by read_tsv() and turn it into a dict mapping values in the
   "key_label" column to lists of rows with that value. If key_label2 is provided, that is used as
-  an alternative key column to be used in the case where the first column is not present or empty
-  (empty string). If both are missing, the row is skipped."""
+  an alternative key column to be used in the case where the first column is null (not present,
+  empty string, or "."). If both are missing, the row is skipped."""
   dictlist = {}
   for row in rows:
     # Try to get the value of the key column.
     # If the column is not present or empty, try the alternative key column (key_label2) if it's
     # given. If that doesn't work, silently skip the row.
     key = row.get(key_label)
-    if key is None or key == '' and key_label2 is not None:
+    if key is None or key == '' or key == '.' and key_label2 is not None:
       key = row.get(key_label2)
-      if key is None or key == '' and key_label2 is not None:
+      if key is None or key == '' or key == '.' and key_label2 is not None:
         continue
     rowlist = dictlist.get(key, [])
     rowlist.append(row)
