@@ -73,10 +73,6 @@ def termsize_stty():
   Returns a tuple of (height, width) int's, or (None, None) on error.
   Requires Python 2.7."""
   import subprocess
-  #TODO: Remove dependence on distutils.spawn
-  import distutils.spawn
-  if not distutils.spawn.find_executable('stty'):
-    return (None, None)
   devnull = open(os.devnull, 'wb')
   try:
     output = subprocess.check_output(['stty', 'size'], stderr=devnull)
