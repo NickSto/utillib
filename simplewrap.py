@@ -2,7 +2,8 @@
 """A wrapper for textwrap, to simplify its usage and add an important
 capability."""
 import textwrap
-__version__ = '0.6'
+import console
+__version__ = '0.7'
 
 DEFAULT_WIDTH = 70
 
@@ -14,10 +15,7 @@ def wrap(text, width=None, indent=0, lspace=0, **kwargs):
   with, so remember not to pre-wrap!
   width
     The maximum line length. If "width" is not given, it will try to determine
-  the current terminal width using termwidth(). If it cannot determine it, it
-  will default to DEFAULT_WIDTH. But termwidth() requires Python 2.7 and it
-  executes the external "stty" command each time, so if you're using this
-  multiple times it's best to supply a width.
+  the current terminal width using console.termwidth().
   lspace
     Number of spaces to prepend to each line. Counts toward the line width.
   indent
@@ -28,26 +26,6 @@ def wrap(text, width=None, indent=0, lspace=0, **kwargs):
   "indent" will be ignored."""
   wrapper = Wrapper(width=width, indent=indent, lspace=lspace, **kwargs)
   return wrapper.wrap(text)
-
-
-def termwidth(default=None):
-  """Get current terminal width, using stty command.
-  If stty isn't available, or if it gives an error, return the default (or
-  None, if no default was given).
-  Note: requires Python 2.7"""
-  import os
-  import subprocess
-  import distutils.spawn
-  if not distutils.spawn.find_executable('stty'):
-    return default
-  devnull = open(os.devnull, 'wb')
-  try:
-    output = subprocess.check_output(['stty', 'size'], stderr=devnull)
-  except (OSError, subprocess.CalledProcessError):
-    return default
-  finally:
-    devnull.close()
-  return int(output.split()[1])
 
 
 def wrapper(width=None, indent=0, lspace=0, **kwargs):
@@ -68,7 +46,7 @@ class Wrapper(object):
   def __init__(self, width=None, indent=0, lspace=0, **kwargs):
     self._textwrapper = textwrap.TextWrapper(**kwargs)
     if width is None:
-      self.width = termwidth(DEFAULT_WIDTH)
+      self.width = console.termwidth(DEFAULT_WIDTH)
     if not (kwargs.get('subsequent_indent') or kwargs.get('initial_indent')):
       self.lspace = lspace
       self.indent = indent
