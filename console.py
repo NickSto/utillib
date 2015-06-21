@@ -131,3 +131,12 @@ def termsize_win():
     return (height, width)
   except TypeError:
     return (None, None)
+
+
+#TODO: Use by default? Look into whether it works everywhere and better than all other methods.
+def termsize_curses():
+  import curses
+  stdscr = curses.initscr()
+  (height, width) = stdscr.getmaxyx()
+  curses.endwin()
+  return (height, width)
