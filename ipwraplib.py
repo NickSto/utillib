@@ -4,6 +4,7 @@ import os
 import re
 import uuid
 import socket
+import random
 import subprocess
 import distutils.spawn
 
@@ -105,6 +106,15 @@ def dig_ip(domain):
   return None
 
 
+def dns_query(domain):
+  """Use the socket module to do a DNS query.
+  Returns None on failure instead of raising an exception (like socket.gaierror)."""
+  try:
+    return socket.gethostbyname(domain)
+  except socket.error:
+    return None
+
+
 def get_mac_from_ip(ip):
   """Use 'arp -a' command to look up the MAC address of an IP on the LAN.
   Returns None on error, or if the IP isn't found."""
@@ -147,8 +157,23 @@ def get_mac():
   return mac
 
 
+def get_random_mac():
+  """Generate a valid, random MAC address."""
+  octets = []
+  # In the first byte, the two least-significant bits must be 10:
+  # The 1 means it's a local MAC address (not globally assigned and unique).
+  # The 0 means it's not a broadcast address.
+  # https://superuser.com/questions/725467/set-mac-address-fails-rtnetlink-answers-cannot-assign-requested-address/725472#725472
+  octet = random.randint(0, 63)*4 + 2
+  octets.append('{:02x}'.format(octet))
+  for i in range(5):
+    octet = random.randint(0, 255)
+    octets.append('{:02x}'.format(octet))
+  return ':'.join(octets)
+
+
 def get_ip():
-  """Get this machine's IP address.
+  """Get this machine's local IP address.
   Should return the actual one used to connect to public IP's, if multiple
   interfaces are being used."""
   #TODO: Use get_default_route() to determine correct interface, and directly
