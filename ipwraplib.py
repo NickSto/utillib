@@ -194,6 +194,30 @@ def local_to_global_mac(mac_input):
   return mac_global
 
 
+def is_mac_local(mac):
+  """Check whether the "locally administered" bit in a MAC address is set to 1."""
+  return _test_mac_bit(mac, 2)
+
+def is_mac_global(mac):
+  """Check whether the "locally administered" bit in a MAC address is set to 0.
+  This means that the MAC address should be "globally unique"."""
+  return not _test_mac_bit(mac, 2)
+
+def is_mac_multicast(mac):
+  """Check whether the "multicast" bit in a MAC address is set to 1."""
+  return _test_mac_bit(mac, 1)
+
+def is_mac_unicast(mac):
+  """Check whether the "multicast" bit in a MAC address is set to 0.
+  This means the MAC address is unicast."""
+  return not _test_mac_bit(mac, 1)
+
+def _test_mac_bit(mac, bit):
+  octets = mac.split(':')
+  octet1_int = int(octets[0], 16)
+  return bool(octet1_int & bit)
+
+
 def get_ip():
   """Get this machine's local IP address.
   Should return the actual one used to connect to public IP's, if multiple
