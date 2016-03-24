@@ -194,6 +194,26 @@ def local_to_global_mac(mac_input):
   return mac_global
 
 
+def is_mac_normal(mac):
+  """Check whether the MAC address is the common type used by networking hardware.
+  Returns false if it's a locally administered, multicast, or broadcast address."""
+  # Is broadcast address?
+  if is_mac_broadcast(mac):
+    return False
+  octets = mac.split(':')
+  octet1_int = int(octets[0], 16)
+  # Is multicast bit set?
+  if octet1_int & 1:
+    return False
+  # Is locally administered bit set?
+  if octet1_int & 2:
+    return False
+  return True
+
+def is_mac_broadcast(mac):
+  """Check whether the MAC address is the broadcast FF:FF:FF:FF:FF:FF address."""
+  return mac.upper() == 'FF:FF:FF:FF:FF:FF'
+
 def is_mac_local(mac):
   """Check whether the "locally administered" bit in a MAC address is set to 1."""
   return _test_mac_bit(mac, 2)
