@@ -6,21 +6,16 @@ import random
 def get_mac():
   """Get your own device's MAC address using uuid.getnode().
   Returns the MAC formatted in standard hex with colons."""
+  #TODO: On failure, getnode() returns a random MAC. Check the "eight bit" to see if it's that:
+  #      https://docs.python.org/2/library/uuid.html#uuid.getnode
+  #TODO: getnode() also arbitrarily chooses a MAC when the device has more than one. May have to use
+  #      another method to make sure it's the MAC of the NIC in use. Probably have to just create a
+  #      dummy socket using a public IP.
   # uuid.getnode() returns the MAC as an integer.
-  mac_hex = hex(uuid.getnode())
-  # [2:] removes leading '0x'.
-  mac_hex = mac_hex[2:]
-  # Fill in leading 0's, if needed.
-  mac_hex = ('0' * (13 - len(mac_hex))) + mac_hex
-  # Remove trailing 'L'.
-  mac_hex = mac_hex[:12]
+  mac_hex = '{:012x}'.format(uuid.getnode())
   # Build mac from characters in mac_hex, inserting colons.
-  mac = ''
-  for (i, char) in enumerate(mac_hex):
-    if i > 1 and i % 2 == 0:
-      mac += ':'
-    mac += char
-  return mac
+  octets = (mac_hex[i:i+2] for i in range(0, 12, 2))
+  return ':'.join(octets)
 
 
 def get_random_mac():
