@@ -48,10 +48,12 @@ def local_to_global_mac(mac_input):
   octets[0] = octet1_global
   mac_global = ':'.join(octets)
   # Follow capitalization of the input.
-  for alpha in ('A', 'B', 'C', 'D', 'E', 'F'):
-    if alpha in mac_input:
-      return mac_global.upper()
-  return mac_global
+  if mac_input.islower():
+    return mac_global.lower()
+  elif mac_input.isupper():
+    return mac_global.upper()
+  else:
+    return mac_global
 
 
 def is_mac_normal(mac):
