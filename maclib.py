@@ -32,6 +32,31 @@ def get_random_mac():
   return ':'.join(octets)
 
 
+def mac48_to_eui64(mac48):
+  octets = mac48.split(':')
+  if mac48.isupper():
+    middle = 'FF:FE'
+  else:
+    middle = 'ff:fe'
+  return octets[:3] + middle + octets[3:]
+
+
+def eui48_to_eui64(eui48):
+  """This is part 1 of how IPv6 generates addresses from MAC addresses. The second part is flipping
+  the locally administered bit."""
+  octets = eui48.split(':')
+  if eui48.isupper():
+    middle = 'FF:FF'
+  else:
+    middle = 'ff:ff'
+  return octets[:3] + middle + octets[3:]
+
+
+def eui64_to_mac48(eui64):
+  octets = eui64.split(':')
+  return octets[:3] + octets[5:]
+
+
 def local_to_global_mac(mac_input):
   """Alter a MAC address by setting its "locally administered" bit to 0.
   If there are alphabetic characters in the MAC, the output will match their case."""
