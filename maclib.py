@@ -41,7 +41,20 @@ def eui64_to_mac(eui64):
   return Mac(_bytes[:3] + _bytes[5:])
 
 
-class Mac(object):
+# Subclass tuple to make Mac immutable.
+class Mac(tuple):
+  """An object representing a MAC address.
+  Initialize with one argument: a MAC address in one of 4 representations:
+    1. a string of the colon-delimited hexadecimal bytes
+    2. an iterable of the bytes as hex strings
+    3. an iterable of the bytes as integers
+    4. a single integer representing the 48-bit value of the address
+  When a representation is requested that wasn't given initially, it is computed and cached.
+  Mac objects are immutable."""
+
+  # Need to override tuple's __new__().
+  def __new__(cls, mac):
+    return tuple.__new__(cls, ())
 
   def __init__(self, mac):
     self._string = None
@@ -49,6 +62,7 @@ class Mac(object):
     self._bytes = None
     self._byte_ints = None
     if isinstance(mac, basestring):
+      assert len(mac) == 17, 'Mac string must be 17 characters (6 colon-delimited hex bytes).'
       self._string = mac
     elif isinstance(mac, numbers.Integral):
       self._number = mac
@@ -105,24 +119,6 @@ class Mac(object):
       else:
         raise AssertionError('Mac object is uninitialized.')
     return self._bytes
-
-  #TODO: A more general way of preventing modification of attributes.
-
-  @string.setter
-  def string(self, string):
-    raise AttributeError('Mac objects are not mutable.')
-
-  @number.setter
-  def number(self, number):
-    raise AttributeError('Mac objects are not mutable.')
-
-  @byte_ints.setter
-  def byte_ints(self, byte_ints):
-    raise AttributeError('Mac objects are not mutable.')
-
-  @bytes.setter
-  def bytes(self, bytes):
-    raise AttributeError('Mac objects are not mutable.')
 
   def __str__(self):
     return self.string
