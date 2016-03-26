@@ -1,21 +1,24 @@
 """Operations on MAC addresses."""
 import uuid
 import random
+import numbers
 
 
 def get_mac():
   """Get your own device's MAC address using uuid.getnode().
-  Returns the MAC formatted in standard hex with colons."""
-  #TODO: On failure, getnode() returns a random MAC. Check the "eight bit" to see if it's that:
-  #      https://docs.python.org/2/library/uuid.html#uuid.getnode
-  #TODO: getnode() also arbitrarily chooses a MAC when the device has more than one. May have to use
-  #      another method to make sure it's the MAC of the NIC in use. Probably have to just create a
+  Returns a Mac object, or None on failure."""
+  #TODO: uuid.getnode() arbitrarily chooses a MAC when the device has more than one. May have to use
+  #      another method to make sure it's the MAC of the NIC in use. Probably have to create a
   #      dummy socket using a public IP.
   # uuid.getnode() returns the MAC as an integer.
-  mac_hex = '{:012x}'.format(uuid.getnode())
-  # Build mac from characters in mac_hex, inserting colons.
-  octets = (mac_hex[i:i+2] for i in range(0, 12, 2))
-  return ':'.join(octets)
+  uuid_mac = Mac(uuid.getnode())
+  # On failure, uuid.getnode() returns a random MAC, with the eight bit set:
+  # https://docs.python.org/2/library/uuid.html#uuid.getnode
+  # Check the eight bit to determine whether it failed.
+  if uuid_mac.byte_ints[0] & 0b00000001:
+    return None
+  else:
+    return uuid_mac
 
 
 def get_random_mac():
@@ -24,102 +27,183 @@ def get_random_mac():
   # The 1 means it's a local MAC address (not globally assigned and unique).
   # The 0 means it's not a broadcast address.
   # https://superuser.com/questions/725467/set-mac-address-fails-rtnetlink-answers-cannot-assign-requested-address/725472#725472
-  octet1_int = random.randint(0, 63)*4
-  octets = ['{:02x}'.format(octet1_int)]
+  # 0-63 * 4 gives a number with 00 as the last binary digits.
+  number = random.randint(0, 63) * 4
+  # Add the following 5 bytes.
   for i in range(5):
-    octet_int = random.randint(0, 255)
-    octets.append('{:02x}'.format(octet_int))
-  return ':'.join(octets)
+    number *= random.randint(0, 255)
+  return Mac(number)
 
 
-def mac48_to_eui64(mac48):
-  octets = mac48.split(':')
-  if mac48.isupper():
-    middle = 'FF:FE'
-  else:
-    middle = 'ff:fe'
-  return octets[:3] + middle + octets[3:]
+def eui64_to_mac(eui64):
+  """Convert an EUI-64 to a MAC address by removing the middle two bytes."""
+  _bytes = eui64.split(':')
+  return Mac(_bytes[:3] + _bytes[5:])
 
 
-def eui48_to_eui64(eui48):
-  """This is part 1 of how IPv6 generates addresses from MAC addresses. The second part is flipping
-  the locally administered bit."""
-  octets = eui48.split(':')
-  if eui48.isupper():
-    middle = 'FF:FF'
-  else:
-    middle = 'ff:ff'
-  return octets[:3] + middle + octets[3:]
+class Mac(object):
 
+  def __init__(self, mac):
+    self._string = None
+    self._number = None
+    self._bytes = None
+    self._byte_ints = None
+    if isinstance(mac, basestring):
+      self._string = mac
+    elif isinstance(mac, numbers.Integral):
+      self._number = mac
+    else:
+      try:
+        _bytes = tuple(mac)
+      except TypeError:
+        raise AssertionError('Mac object must be initialized with a string, integer, or iterable.')
+      assert len(_bytes) == 6, 'Mac must consist of 6 bytes.'
+      if isinstance(_bytes[0], basestring):
+        self._bytes = _bytes
+      elif isinstance(_bytes[0], numbers.Number):
+        self._byte_ints = _bytes
+      else:
+        raise AssertionError('Mac bytes must be numbers or strings.')
 
-def eui64_to_mac48(eui64):
-  octets = eui64.split(':')
-  return octets[:3] + octets[5:]
+  @property
+  def string(self):
+    """A string representing the MAC address as the standard colon-delimited hex bytes.
+    If it doesn't exist, derive it from the bytes."""
+    if self._string is None:
+      self._string = ':'.join(self.bytes)
+    return self._string
 
+  @property
+  def number(self):
+    """An int representing the MAC address value as a number.
+    If it doesn't exist, derive it from the bytes."""
+    if self._number is None:
+      hexadecimal = ''.join(self.bytes)
+      self._number = int(hexadecimal, 16)
+    return self._number
 
-def local_to_global_mac(mac_input):
-  """Alter a MAC address by setting its "locally administered" bit to 0.
-  If there are alphabetic characters in the MAC, the output will match their case."""
-  octets = mac_input.split(':')
-  octet1_int_input = int(octets[0], 16)
-  # Check if the second bit is 1.
-  if octet1_int_input & 2:
-    # If so, flip it with an XOR.
-    octet1_int_global = octet1_int_input ^ 2
-  else:
-    # Otherwise, it's a global MAC already. Return unchanged.
-    return mac_input
-  octet1_global = '{:02x}'.format(octet1_int_global)
-  octets[0] = octet1_global
-  mac_global = ':'.join(octets)
-  # Follow capitalization of the input.
-  if mac_input.islower():
-    return mac_global.lower()
-  elif mac_input.isupper():
-    return mac_global.upper()
-  else:
-    return mac_global
+  @property
+  def byte_ints(self):
+    """A tuple representing the MAC address as a series of bytes (ints).
+    If it doesn't exist, derive it from the bytes."""
+    if self._byte_ints is None:
+      self._byte_ints = tuple(int(o, 16) for o in self.bytes)
+    return self._byte_ints
 
+  @property
+  def bytes(self):
+    """An tuple representing the MAC address as a series of hex bytes (strings).
+    If it doesn't exist, try deriving it from one of the other representations."""
+    if self._bytes is None:
+      if self._string is not None:
+        self._bytes = tuple(self._string.split(':'))
+      elif self._byte_ints is not None:
+        self._bytes = tuple('{:02x}'.format(o) for o in self._byte_ints)
+      elif self._number is not None:
+        hexadecimal = '{:012x}'.format(self._number)
+        self._bytes = tuple(hexadecimal[i:i+2] for i in range(0, 12, 2))
+      else:
+        raise AssertionError('Mac object is uninitialized.')
+    return self._bytes
 
-def is_mac_normal(mac):
-  """Check whether the MAC address is the common type used by networking hardware.
-  Returns false if it's a locally administered, multicast, or broadcast address."""
-  # Is broadcast address?
-  if is_mac_broadcast(mac):
-    return False
-  octets = mac.split(':')
-  octet1_int = int(octets[0], 16)
-  # Is multicast bit set?
-  if octet1_int & 1:
-    return False
-  # Is locally administered bit set?
-  if octet1_int & 2:
-    return False
-  return True
+  #TODO: A more general way of preventing modification of attributes.
 
-def is_mac_broadcast(mac):
-  """Check whether the MAC address is the broadcast FF:FF:FF:FF:FF:FF address."""
-  return mac.upper() == 'FF:FF:FF:FF:FF:FF'
+  @string.setter
+  def string(self, string):
+    raise AttributeError('Mac objects are not mutable.')
 
-def is_mac_local(mac):
-  """Check whether the "locally administered" bit in a MAC address is set to 1."""
-  return _test_mac_bit(mac, 2)
+  @number.setter
+  def number(self, number):
+    raise AttributeError('Mac objects are not mutable.')
 
-def is_mac_global(mac):
-  """Check whether the "locally administered" bit in a MAC address is set to 0.
-  This means that the MAC address should be "globally unique"."""
-  return not _test_mac_bit(mac, 2)
+  @byte_ints.setter
+  def byte_ints(self, byte_ints):
+    raise AttributeError('Mac objects are not mutable.')
 
-def is_mac_multicast(mac):
-  """Check whether the "multicast" bit in a MAC address is set to 1."""
-  return _test_mac_bit(mac, 1)
+  @bytes.setter
+  def bytes(self, bytes):
+    raise AttributeError('Mac objects are not mutable.')
 
-def is_mac_unicast(mac):
-  """Check whether the "multicast" bit in a MAC address is set to 0.
-  This means the MAC address is unicast."""
-  return not _test_mac_bit(mac, 1)
+  def __str__(self):
+    return self.string
 
-def _test_mac_bit(mac, bit):
-  octets = mac.split(':')
-  octet1_int = int(octets[0], 16)
-  return bool(octet1_int & bit)
+  def __repr__(self):
+    return "{}.{}('{}')".format(type(self).__module__, type(self).__name__, self.string)
+
+  def to_eui64(self, is_mac48=False):
+    """Convert the MAC address to an EUI-64 address.
+    This expands the address to 64 bits by adding 'ff:fe' as the middle two bytes, by default.
+    This is the procedure when the MAC address is considered an EUI-48 (as is done when creating an
+    IPv6 address from a MAC address). If the MAC address should be considered a MAC-48 instead, so
+    that 'ff:ff' is used as the middle bytes, set 'is_mac48' to True.
+    N.B.: This is part 1 of how IPv6 generates addresses from MAC addresses. The second part is
+    flipping the locally administered bit."""
+    if is_mac48:
+      middle = 'ff:ff'
+    else:
+      middle = 'ff:fe'
+    return self.bytes[:3] + middle + self.bytes[3:]
+
+  def is_broadcast(self):
+    """Check whether the MAC address is the broadcast FF:FF:FF:FF:FF:FF address."""
+    return self.string.upper() == 'FF:FF:FF:FF:FF:FF'
+
+  def is_local(self):
+    """Check whether the "locally administered" bit in a MAC address is set to 1."""
+    return bool(self.byte_ints[0] & 0b00000010)
+
+  def is_global(self):
+    """Check whether the "locally administered" bit in a MAC address is set to 0.
+    This means that the MAC address should be "globally unique"."""
+    return not bool(self.byte_ints[0] & 0b00000010)
+
+  def is_multicast(self):
+    """Check whether the "multicast" bit in a MAC address is set to 1."""
+    return bool(self.byte_ints[0] & 0b00000001)
+
+  def is_unicast(self):
+    """Check whether the "multicast" bit in a MAC address is set to 0.
+    This means the MAC address is unicast."""
+    return not bool(self.byte_ints[0] & 0b00000001)
+
+  def is_normal(self):
+    """Check whether the MAC address is the common type used by networking hardware.
+    Returns false if it's a locally administered, multicast, or broadcast address."""
+    # Is broadcast address?
+    if self.is_broadcast():
+      return False
+    # Is locally administered bit set?
+    if self.is_local():
+      return False
+    # Is multicast bit set?
+    if self.is_multicast():
+      return False
+    return True
+
+  def to_local(self):
+    """Set the "locally administered" bit to 1 and return the result."""
+    byte_ints = list(self.byte_ints)
+    # OR the first byte with 00000010.
+    byte_ints[0] = byte_ints[0] | 0b00000010
+    return Mac(byte_ints)
+
+  def to_global(self):
+    """Set the "locally administered" bit to 0 and return the result."""
+    byte_ints = list(self.byte_ints)
+    # AND the first byte with 11111101.
+    byte_ints[0] = byte_ints[0] & 0b11111101
+    return Mac(byte_ints)
+
+  def to_multicast(self):
+    """Set the "multicast" bit to 1 and return the result."""
+    byte_ints = list(self.byte_ints)
+    # OR the first byte with 00000001.
+    byte_ints[0] = byte_ints[0] | 0b00000001
+    return Mac(byte_ints)
+
+  def to_unicast(self):
+    """Set the "multicast" bit to 0 and return the result."""
+    byte_ints = list(self.byte_ints)
+    # AND the first byte with 11111110.
+    byte_ints[0] = byte_ints[0] & 0b11111110
+    return Mac(byte_ints)
