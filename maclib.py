@@ -126,6 +126,12 @@ class Mac(tuple):
   def __repr__(self):
     return "{}.{}('{}')".format(type(self).__module__, type(self).__name__, self.string)
 
+  def __eq__(self, mac2):
+    return self.string.upper() == mac2.string.upper()
+
+  def __ne__(self, mac2):
+    return self.string.upper() != mac2.string.upper()
+
   def to_eui64(self, is_mac48=False):
     """Convert the MAC address to an EUI-64 address.
     This expands the address to 64 bits by adding 'ff:fe' as the middle two bytes, by default.
