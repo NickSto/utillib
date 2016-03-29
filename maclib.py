@@ -63,7 +63,7 @@ class Mac(tuple):
     self._byte_ints = None
     if isinstance(mac, basestring):
       assert len(mac) == 17, 'Mac string must be 17 characters (6 colon-delimited hex bytes).'
-      self._string = mac
+      self._string = mac.upper()
     elif isinstance(mac, numbers.Integral):
       self._number = mac
     else:
@@ -112,9 +112,9 @@ class Mac(tuple):
       if self._string is not None:
         self._bytes = tuple(self._string.split(':'))
       elif self._byte_ints is not None:
-        self._bytes = tuple('{:02x}'.format(o) for o in self._byte_ints)
+        self._bytes = tuple('{:02X}'.format(o) for o in self._byte_ints)
       elif self._number is not None:
-        hexadecimal = '{:012x}'.format(self._number)
+        hexadecimal = '{:012X}'.format(self._number)
         self._bytes = tuple(hexadecimal[i:i+2] for i in range(0, 12, 2))
       else:
         raise AssertionError('Mac object is uninitialized.')
@@ -127,28 +127,28 @@ class Mac(tuple):
     return "{}.{}('{}')".format(type(self).__module__, type(self).__name__, self.string)
 
   def __eq__(self, mac2):
-    return self.string.upper() == mac2.string.upper()
+    return self.string == mac2.string
 
   def __ne__(self, mac2):
-    return self.string.upper() != mac2.string.upper()
+    return self.string != mac2.string
 
   def to_eui64(self, is_mac48=False):
     """Convert the MAC address to an EUI-64 address.
-    This expands the address to 64 bits by adding 'ff:fe' as the middle two bytes, by default.
+    This expands the address to 64 bits by adding 'FF:FE' as the middle two bytes, by default.
     This is the procedure when the MAC address is considered an EUI-48 (as is done when creating an
     IPv6 address from a MAC address). If the MAC address should be considered a MAC-48 instead, so
-    that 'ff:ff' is used as the middle bytes, set 'is_mac48' to True.
+    that 'FF:FF' is used as the middle bytes, set 'is_mac48' to True.
     N.B.: This is part 1 of how IPv6 generates addresses from MAC addresses. The second part is
     flipping the locally administered bit."""
     if is_mac48:
-      middle = 'ff:ff'
+      middle = 'FF:FF'
     else:
-      middle = 'ff:fe'
+      middle = 'FF:FE'
     return self.bytes[:3] + middle + self.bytes[3:]
 
   def is_broadcast(self):
     """Check whether the MAC address is the broadcast FF:FF:FF:FF:FF:FF address."""
-    return self.string.upper() == 'FF:FF:FF:FF:FF:FF'
+    return self.string == 'FF:FF:FF:FF:FF:FF'
 
   def is_local(self):
     """Check whether the "locally administered" bit in a MAC address is set to 1."""
