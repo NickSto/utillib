@@ -6,8 +6,6 @@ import socket
 import subprocess
 import distutils.spawn
 
-DEFAULT_ROUTE_REGEX = r'^default\s+via\s+((?:\d{1,3}\.){3}\d{1,3})\s+dev\s+(\S+)\s+\S+\s+\S+\s*$'
-
 
 def get_wifi_info():
   """Find out what the wifi interface name, SSID and MAC address are.
