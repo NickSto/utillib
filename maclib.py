@@ -74,7 +74,7 @@ class Mac(tuple):
       assert len(_bytes) == 6, 'Mac must consist of 6 bytes.'
       if isinstance(_bytes[0], basestring):
         self._bytes = _bytes
-      elif isinstance(_bytes[0], numbers.Number):
+      elif isinstance(_bytes[0], numbers.Integral):
         self._byte_ints = _bytes
       else:
         raise AssertionError('Mac bytes must be numbers or strings.')
