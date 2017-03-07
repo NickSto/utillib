@@ -1,7 +1,10 @@
 """Operations on MAC addresses."""
+import os
 import uuid
 import random
 import numbers
+import subprocess
+import distutils.spawn
 
 
 def get_mac():
@@ -14,11 +17,52 @@ def get_mac():
   uuid_mac = Mac(uuid.getnode())
   # On failure, uuid.getnode() returns a random MAC, with the eight bit set:
   # https://docs.python.org/2/library/uuid.html#uuid.getnode
-  # Check the eight bit to determine whether it failed.
+  # Check the eigth bit to determine whether it failed.
   if uuid_mac.byte_ints[0] & 0b00000001:
-    return None
+    # Try harder. (Use the "ip" command.)
+    device = get_default_device()
+    mac_str = get_mac_of_device(device)
+    if mac_str:
+      return Mac(mac_str)
+    else:
+      return None
   else:
     return uuid_mac
+
+
+def get_mac_of_device(device):
+  output = execute_cmd(['ip', 'link', 'show', 'dev', device], bin_path='/sbin/ip')
+  line_num = 0
+  for line in output.splitlines():
+    line_num += 1
+    if line_num == 2:
+      fields = line.split()
+      if len(fields) > 2:
+        return fields[1]
+  return None
+
+
+def get_default_device():
+  output = execute_cmd(['ip', 'route', 'show', '0/0'], bin_path='/sbin/ip')
+  fields = output.split()
+  if len(fields) < 6:
+    return None
+  else:
+    return fields[4]
+
+
+def execute_cmd(cmd, bin_path=None):
+  if bin_path:
+    if 'PATH' not in os.environ or not distutils.spawn.find_executable(cmd[0]):
+      cmd[0] = bin_path
+  devnull = open(os.devnull, 'w')
+  try:
+    output = subprocess.check_output(cmd, stderr=devnull)
+  except (OSError, subprocess.CalledProcessError):
+    return None
+  finally:
+    devnull.close()
+  return output
 
 
 def get_random_mac():
