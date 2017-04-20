@@ -168,3 +168,58 @@ def get_ip():
   ip = sock.getsockname()[0]
   sock.close()
   return ip
+
+
+def mask_ip(ip, prefix_len=None):
+  """Take an ip and prefix and return the actual ip range it represents.
+  Provide an ip address as a string and a prefix length (the part after the slash) as an int, or
+  an ip address/prefix length as a single string in CIDR notation:
+    upper, lower = mask_ip('104.39.72.0', 22)
+  or
+    upper, lower = mask_ip('104.39.72.0/22')
+  Returns the lower and upper bounds of the ip range as strings.
+  """
+  if prefix_len is None:
+    ip, prefix_len_str = ip.split('/')
+    prefix_len = int(prefix_len_str)
+  ip_bin = ip_to_bin(ip)
+  ip_int = int(ip_bin, 2)
+  mask_bin = '1' * prefix_len + '0' * (32-prefix_len)
+  mask_int = int(mask_bin, 2)
+  lower_bound_int = ip_int & mask_int
+  # Get the "opposite" of the mask (e.g. 11111000 -> 00000111, if IP addresses were 8 bits).
+  subnet_int = 0b11111111111111111111111111111111 ^ mask_int
+  upper_bound_int = lower_bound_int + subnet_int
+  lower_bound_str = int_to_ip(lower_bound_int)
+  upper_bound_str = int_to_ip(upper_bound_int)
+  return lower_bound_str, upper_bound_str
+
+
+def ip_to_bin(ip_str):
+  bin_str = ''
+  for byte_int_str in ip_str.split('.'):
+    byte_int = int(byte_int_str)
+    byte_bin_str = bin(byte_int)[2:]
+    byte_bin_str = pad_binary(byte_bin_str, 8)
+    bin_str += byte_bin_str
+  return bin_str
+
+
+def int_to_ip(ip_int):
+  ip_bin = bin(ip_int)[2:]
+  ip_bin = pad_binary(ip_bin, 32)
+  return bin_to_ip(ip_bin)
+
+
+def bin_to_ip(ip_bin):
+  ip_byte_strs = []
+  for i in range(0, 32, 8):
+    byte_bin_str = ip_bin[i:i+8]
+    byte_int = int(byte_bin_str, 2)
+    byte_int_str = str(byte_int)
+    ip_byte_strs.append(byte_int_str)
+  return '.'.join(ip_byte_strs)
+
+
+def pad_binary(bin_str, length):
+  return '0' * (length-len(bin_str)) + bin_str
