@@ -7,25 +7,76 @@ import os
 import sys
 import argparse
 import subprocess
+import collections
+import ConfigParser
 
 # The parent directory of the directory this script is in. Since this will usually be included as a
 # module in the "lib" submodule of a project, if we used this file's directory we'd get the commit
 # of the submodule. Instead, cd to the directory above to get the commit of the main repo.
 _SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-_DEFAULT_VERSION_FILENAME = 'VERSION'
+_DEFAULT_CONFIG_FILENAME = 'VERSION'
 
 
-def get_git_commit(git_dir=None):
+class Version(object):
+  PRIMARY_KEYS = ('project', 'version_num', 'stage', 'commit')
+  def __init__(self, **kwargs):
+    for key in self.PRIMARY_KEYS:
+      setattr(self, key, kwargs.get(key, None))
+  @property
+  def version(self):
+    return str(self)
+  def __str__(self):
+    version = ''
+    if self.version_num is None:
+      return version
+    else:
+      version += self.version_num
+    if self.stage is None:
+      return version
+    else:
+      version += '-' + self.stage
+    if self.commit is None:
+      return version
+    else:
+      version += '+' + self.commit
+    return version
+  def __repr__(self):
+    class_name = type(self).__name__
+    kwarg_list = ['{}={}'.format(key, getattr(self, key)) for key in self.PRIMARY_KEYS]
+    kwarg_str = ', '.join(kwarg_list)
+    return class_name+'('+kwarg_str+')'
+
+
+def get_version(config_path=None, repo_dir=None):
+  """Get the full version string from a config file and/or commit hash.
+  If a git commit can be obtained, it's the concatenation of version_num+commit.
+  Otherwise it's just the version_num.
+  If the version_num is not supplied, it tries to read it from disk using get_version_num()."""
+  if config_path is None:
+    config_path = os.path.join(_SCRIPT_DIR, _DEFAULT_CONFIG_FILENAME)
+  config = _read_config(config_path)
+  version = Version()
+  if config is not None:
+    version.project = config['project']
+    version.version_num = config['version_num']
+    version.stage = config['stage']
+  commit = _get_git_commit(repo_dir)
+  if commit is not None:
+    version.commit = commit
+  return version
+
+
+def _get_git_commit(repo_dir=None):
   """Get the current git commit of this script."""
   # We have to cd to the repository directory because the --git-dir and --work-tree options don't
   # work on BSD. BUT: actually, it looks like on recent versions (FreeBSD 11.0) it might work.
   # Investigate.
-  if git_dir is None:
-    git_dir = _SCRIPT_DIR
+  if repo_dir is None:
+    repo_dir = _SCRIPT_DIR
   original_cwd = os.getcwd()
   try:
-    if original_cwd != git_dir:
-      os.chdir(git_dir)
+    if original_cwd != repo_dir:
+      os.chdir(repo_dir)
     commit = _run_command(['git', 'log', '-n', '1', '--pretty=%h'], strip_newline=True)
   except OSError:
     return None
@@ -33,39 +84,6 @@ def get_git_commit(git_dir=None):
     if original_cwd != os.getcwd():
       os.chdir(original_cwd)
   return commit
-
-
-def get_version_num(version_filepath):
-  """Get the version number from a file on disk.
-  Returns the first line from the file, stripped of newlines. Returns None on failure.
-  Should be something like "1.0" or "0.2.1-alpha"."""
-  if version_filepath:
-    try:
-      with open(version_filepath, 'rU') as version_file:
-        return version_file.readline().rstrip('\r\n')
-    except IOError:
-      return None
-
-
-def get_version(version_num=None, version_filepath=None):
-  """Get the full version string.
-  If a git commit can be obtained, it's the concatenation of version_num+commit.
-  Otherwise it's just the version_num.
-  If the version_num is not supplied, it tries to read it from disk using get_version_num()."""
-  if version_filepath is None:
-    version_filepath = os.path.join(_SCRIPT_DIR, _DEFAULT_VERSION_FILENAME)
-  if version_num is None:
-    version_num = get_version_num(version_filepath)
-  if version_num:
-    commit = get_git_commit()
-    if commit:
-      return '{}+{}'.format(version_num, commit)
-    else:
-      return str(version_num)
-  elif commit:
-    return commit
-  else:
-    return None
 
 
 def _run_command(command, strip_newline=False):
@@ -88,18 +106,38 @@ def _run_command(command, strip_newline=False):
     return output
 
 
+def _read_config(config_path):
+  """
+  Return None on failure."""
+  KEYS = ('project', 'version_num', 'stage')
+  data = collections.defaultdict(lambda: None)
+  config = ConfigParser.RawConfigParser()
+  try:
+    result = config.read(config_path)
+  except ConfigParser.Error:
+    return None
+  if not result:
+    return None
+  for key in KEYS:
+    try:
+      data[key] = config.get('version', key)
+    except ConfigParser.Error:
+      pass
+  return data
+
+
 def _make_argparser():
   parser = argparse.ArgumentParser()
-  parser.add_argument('-p', '--version-path')
-  parser.add_argument('-g', '--git-dir')
+  parser.add_argument('-c', '--config-path')
+  parser.add_argument('-r', '--repo-dir')
   return parser
 
 
 def _main(argv):
   parser = _make_argparser()
   args = parser.parse_args(argv[1:])
-  print(get_version(version_filepath=args.version_path))
-  print(get_git_commit(git_dir=args.git_dir))
+  version = get_version(config_path=args.config_path, repo_dir=args.repo_dir)
+  print(version)
 
 
 if __name__ == '__main__':
