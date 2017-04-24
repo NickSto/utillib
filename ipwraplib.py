@@ -1,8 +1,13 @@
+#!/usr/bin/env python
 """These functions are some simple wrappers for unix commands that query info
 from the OS like wifi SSIDs, MAC addresses, DNS queries, etc."""
 import os
 import re
+import sys
+import errno
 import socket
+import inspect
+import argparse
 import subprocess
 import distutils.spawn
 
@@ -223,3 +228,104 @@ def bin_to_ip(ip_bin):
 
 def pad_binary(bin_str, length):
   return '0' * (length-len(bin_str)) + bin_str
+
+
+##### Run functions on the command line. #####
+
+
+DESCRIPTION = """Run library functions directly. Use at your own risk. If the function returns None,
+no output will be printed. If the function returns a list, each item will be printed on its own
+line. Otherwise, the raw output will be stringified and printed."""
+
+def main(argv):
+
+  parser = argparse.ArgumentParser(description=DESCRIPTION)
+  parser.add_argument('function', nargs='?',
+    help='The name of the function to run. Use -l to see all valid functions.')
+  parser.add_argument('-l', '--list', action='store_true',
+    help='Print the complete list of functions and exit.')
+  parser.add_argument('-d', '--docstring', action='store_true',
+    help='Print the docstring of the function instead of calling it.')
+  parser.add_argument('arg', nargs='*',
+    help='Any arguments required for the function.')
+  args = parser.parse_args(argv[1:])
+
+  if args.list:
+    for (name, obj) in globals().items():
+      if hasattr(obj, '__call__') and name != 'main':
+        print signature(obj)
+    return 0
+
+  if not args.function:
+    parser.print_help()
+    fail('\nError: Must provide a function.')
+
+  if args.function == 'main':
+    fail('"main"? Nice try.')
+
+  globals_dict = globals()
+  if args.function in globals_dict:
+    obj = globals_dict[args.function]
+    if hasattr(obj, '__call__'):
+      if args.docstring:
+        print 'def '+signature(obj)+':'
+        if obj.__doc__:
+          print '  """'+obj.__doc__+'"""'
+        return 0
+      output = obj(*args.arg)
+      if isinstance(output, list):
+        for item in output:
+          print item
+      elif output is not None:
+        print output
+    else:
+      fail('Error: "'+args.function+'" not a function.')
+  else:
+    fail('Error: function "'+args.function+'"" not recognized.')
+
+
+def signature(func):
+  """Take a function and return the call signature as a string, formatted just
+  like the "def" line (minus the "def " before and ":" after)."""
+  argspec = inspect.getargspec(func)
+  allargs = argspec.args
+  lallargs = len(allargs)
+  defaults = argspec.defaults
+  if defaults is None:
+    lkwargs = 0
+  else:
+    lkwargs = len(defaults)
+  lposargs = lallargs - lkwargs
+  signature = func.__name__+'('
+  for (i, arg) in enumerate(allargs):
+    signature += arg
+    if i >= lposargs:
+      default = defaults[i - lposargs]
+      if isinstance(default, str):
+        signature += "='"+default+"'"
+      else:
+        signature += '='+str(default)
+    if i + 1 < lallargs:
+      signature += ', '
+  if argspec.varargs:
+    signature += ', *'+argspec.varargs
+  if argspec.keywords:
+    signature += ', **'+argspec.keywords
+  signature += ')'
+  return signature
+
+
+def fail(message):
+  sys.stderr.write(message+'\n')
+  if __name__ == '__main__':
+    sys.exit(1)
+  else:
+    raise Exception('Unrecoverable error')
+
+
+if __name__ == '__main__':
+  try:
+    sys.exit(main(sys.argv))
+  except IOError as ioe:
+    if ioe.errno != errno.EPIPE:
+      raise
