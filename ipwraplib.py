@@ -56,21 +56,24 @@ def get_wifi_info():
   return (interface, ssid, mac)
 
 
-def get_default_route():
-  """Determine the default networking interface in use at the moment by using
-  the 'ip route show' command.
+def get_default_route(to='8.8.8.8'):
+  """Determine the default networking interface in use at the moment by using the
+  'ip route get' command.
+  This asks what the route is to a specific, external ip (the "to" argument).
+  By default, this is Google's 8.8.8.8. This differentiates between multiple
+  default routes if there are any.
   Returns the name of the interface, and the IP of the default route. Or, on
   error, returns (None, None)."""
-  interface = None
   ip = None
+  interface = None
   ip_cmd = 'ip'
   # Check if 'ip' command is available. If not, fall back to common absolute path.
   if 'PATH' not in os.environ or not distutils.spawn.find_executable(ip_cmd):
     ip_cmd = '/sbin/ip'
-  # Call 'ip route show'.
+  # Call 'ip route get [ip]'.
   devnull = open(os.devnull, 'w')
   try:
-    output = subprocess.check_output([ip_cmd, 'route', 'show'], stderr=devnull)
+    output = subprocess.check_output([ip_cmd, 'route', 'get', to], stderr=devnull)
   except (OSError, subprocess.CalledProcessError):
     return (None, None)
   finally:
@@ -81,11 +84,21 @@ def get_default_route():
     if len(fields) < 7:
       continue
     # Expect a line like:
-    #   default via 10.21.160.1 dev wlan0  proto static
-    if fields[0] == 'default' and fields[1] == 'via' and fields[3] == 'dev':
-      ip = fields[2]
+    #   8.8.8.8 via 192.168.1.1 dev wlp58s0  src 192.168.1.106
+    #   192.168.2.100 dev wlx74da388d8aeb  src 192.168.2.103
+    #   192.168.1.1 dev wlp58s0  src 192.168.1.106
+    if fields[1] == 'via' and fields[3] == 'dev' and fields[5] == 'src':
+      ip = fields[6]
       interface = fields[4]
-      break
+    elif fields[1] == 'dev' and fields[3] == 'src':
+      ip = fields[4]
+      interface = fields[2]
+    if ip is not None and interface is not None:
+      if re.search(r'^[0-9\.]{7,15}$', ip):
+        break
+      else:
+        ip = None
+        interface = None
   return (interface, ip)
 
 
@@ -160,14 +173,8 @@ def get_mac_from_ip(ip):
     return None
 
 
-def get_ip():
-  """Get this machine's local IP address.
-  Should return the actual one used to connect to public IP's, if multiple
-  interfaces are being used."""
-  #TODO: Use get_default_route() to determine correct interface, and directly
-  #      query its IP instead of kludge of making a dummy connection.
-  #      In the end, this is fundamentally not 100% correct, because packets to different public
-  #      IP's can be routed through different interfaces, depending on the local routing rules.
+def get_ip_socket(to='8.8.8.8'):
+  """Get this machine's local IP address by creating a dummy socket to an external ip."""
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   sock.connect(('8.8.8.8', 53))
   ip = sock.getsockname()[0]
