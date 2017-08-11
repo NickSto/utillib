@@ -10,10 +10,12 @@ import subprocess
 import collections
 import ConfigParser
 
-# The parent directory of the directory this script is in. Since this will usually be included as a
-# module in the "lib" submodule of a project, if we used this file's directory we'd get the commit
-# of the submodule. Instead, cd to the directory above to get the commit of the main repo.
-_SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+# _SCRIPT_DIR is the parent directory of _THIS_DIR, the directory this script is in. Since this will
+# usually be included as a module in the "lib" submodule of a project, if we used this file's
+# directory we'd get the commit of this submodule. Instead, cd to the directory above to get the
+# commit of the main repo.
+_THIS_DIR = os.path.dirname(os.path.realpath(__file__))
+_SCRIPT_DIR = os.path.dirname(_THIS_DIR)
 _DEFAULT_CONFIG_FILENAME = 'VERSION'
 
 
@@ -128,8 +130,8 @@ def _read_config(config_path):
 
 def _make_argparser():
   parser = argparse.ArgumentParser()
-  parser.add_argument('-c', '--config-path')
-  parser.add_argument('-r', '--repo-dir')
+  parser.add_argument('-c', '--config-path', default=os.path.join(_THIS_DIR, _DEFAULT_CONFIG_FILENAME))
+  parser.add_argument('-r', '--repo-dir', default=_THIS_DIR)
   return parser
 
 
