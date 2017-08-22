@@ -1,4 +1,4 @@
 [version]
-project = lib
-version_num = 0.1.0
-#stage = alpha
+project = utillib
+version_num = 0.1.1
+stage = alpha
