@@ -56,6 +56,14 @@ def get_word_uniqueness(string_list):
   return uniqueness
 
 
+def get_max_uniqueness(uniqueness):
+  max_uniqueness = 0
+  for score in uniqueness.values():
+    if score > max_uniqueness:
+      max_uniqueness = score
+  return max_uniqueness
+
+
 def score_words(words, uniqueness, weight_length=False):
   score = 0
   for word in words:
