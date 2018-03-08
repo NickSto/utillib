@@ -1,8 +1,89 @@
 #!/usr/bin/env python3
 import argparse
 import datetime
+import http.client
+import logging
 import sys
+import urllib.parse
 import xml.etree.ElementTree
+
+MAX_RESPONSE = 16384 # bytes
+API_DOMAIN = 'api.pinboard.in'
+GET_API_PATH = '/v1/posts/get?auth_token={token}&url={url}'
+ADD_API_PATH = '/v1/posts/add?auth_token={token}&url={url}&description={title}&tags=tab+automated&replace=no'
+
+
+def quote(string):
+  return urllib.parse.quote_plus(string)
+
+
+def make_request(domain, path):
+  conex = http.client.HTTPSConnection(domain)
+  #TODO: Both of these steps can throw exceptions. Deal with them.
+  conex.request('GET', path)
+  return conex.getresponse()
+
+
+def check_response(response, request_type):
+  if response.status == 429:
+    # API rate limit reached.
+    fail('Error: API rate limit reached (429 Too Many Requests).')
+  response_body = response.read(MAX_RESPONSE)
+  if request_type == 'get':
+    return parse_get_response(response_body)
+  elif request_type == 'add':
+    return parse_add_response(response_body)
+
+
+def parse_get_response(response_body):
+  """Return True if url is already bookmarked, False if not."""
+  try:
+    root = xml.etree.ElementTree.fromstring(response_body)
+  except xml.etree.ElementTree.ParseError:
+    fail('Error 1: Parsing error in response from API:\n'+response_body)
+  if root.tag == 'posts':
+    if len(root) == 0:
+      return False
+    elif len(root) == 1:
+      return True
+    else:
+      fail('Error: Too many hits when checking if tab is already bookmarked: {} hits'
+           .format(len(root)))
+  elif root.tag == 'result':
+    if root.attrib.get('code') == 'something went wrong':
+      fail('Error: Request failed when checking if tab is already bookmarked.')
+    elif root.attrib.get('code') == 'done':
+      fail('Error: "done" returned instead of result when checking if tab is already bookmarked.')
+    elif 'code' in root.attrib:
+      fail('Error: Received message "{}" when checking if tab is already bookmarked.'
+           .format(root.attrib['code']))
+    else:
+      fail('Error 1: Unrecognized response from API:\n'+response_body)
+  else:
+    fail('Error 2: Unrecognized response from API:\n'+response_body)
+
+
+def parse_add_response(response_body):
+  try:
+    root = xml.etree.ElementTree.fromstring(response_body)
+  except xml.etree.ElementTree.ParseError:
+    fail('Error 2: Parsing error in response from API:\n'+response_body)
+  if root.tag == 'result':
+    try:
+      result = root.attrib['code']
+    except KeyError:
+      fail('Error 3: Unrecognized response from API:\n'+response_body)
+    if result == 'done':
+      return True
+    elif result == 'something went wrong':
+      return False
+    else:
+      fail('Error: Received message "{}" when adding bookmark.'.format(result))
+  else:
+    fail('Error 4: Unrecognized response from API:\n'+response_body)
+
+
+########## Export file parsing ##########
 
 
 def parse_archive_file(archive_path, format, tz_offset=None):
@@ -91,6 +172,14 @@ def main(argv):
       print(post.title)
       if post.tags:
         print(', '.join(post.tags))
+
+
+def fail(message):
+  logging.critical(message)
+  if __name__ == '__main__':
+    sys.exit(1)
+  else:
+    raise Exception('Unrecoverable error')
 
 
 if __name__ == '__main__':
