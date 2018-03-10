@@ -5,7 +5,8 @@ import string
 import sys
 assert sys.version_info.major >= 3, 'Python 3 required'
 
-DESCRIPTION = """Library for natural language processing."""
+DESCRIPTION = """Library for natural language processing. Because re-inventing NLP algorithms is
+fun!"""
 
 
 def make_argparser():
@@ -38,6 +39,15 @@ def main(argv):
   elif args.command == 'similarity':
     similarity = get_word_similarity(args.str1, args.str2)
     print(similarity)
+
+
+def get_words(input_str):
+  words = []
+  for word in input_str.lower().split():
+    clean_word = word.strip(string.punctuation)
+    if clean_word:
+      words.append(clean_word)
+  return words
 
 
 def get_word_uniqueness(string_list):
@@ -75,6 +85,14 @@ def score_words(words, uniqueness, weight_length=False):
     return score
 
 
+#TODO: An indexed version of get_word_similarity().
+#      This would speed up the scenario where you're repeatedly searching the same list of strings
+#      for the best match to a query string.
+#      The index can literally be a dict mapping each unique word to a list of strings it appears in.
+#      Then, you can go through the words in your query string, keeping score of how many hits each
+#      target string has.
+
+
 def get_word_similarity(str1, str2, uniqueness=None):
   """Score the similarity of two strings by how many words they have in common.
   The score is the number of words they share over the total number of unique words in both strings.
@@ -92,13 +110,11 @@ def get_word_similarity(str1, str2, uniqueness=None):
   return overlap_score/all_words_score
 
 
-def get_words(input_str):
-  words = []
-  for word in input_str.lower().split():
-    clean_word = word.strip(string.punctuation)
-    if clean_word:
-      words.append(clean_word)
-  return words
+#TODO: An indexed version of get_longest_word_substring().
+#      Same idea as indexed version of get_word_similarity().
+#      In this case, I think the index should be of 2-word ngrams (bigrams), mapping to the strings
+#      that contain them. Then, it might be a very similar algorithm to what's already here, walking
+#      through the query string, keeping track of continuous substrings in targets.
 
 
 def get_longest_word_substring(str1, str2, uniqueness=None):
