@@ -20,19 +20,23 @@ def quote(string):
   return urllib.parse.quote_plus(string)
 
 
-def is_url_bookmarked(url, auth_token):
-  """Check if a url is already bookmarked."""
-  request_path = GET_API_PATH.format(token=auth_token, url=quote(url))
-  response = make_request(API_DOMAIN, request_path)
-  return check_response(response, 'get')
+class ApiInterface(object):
 
+  def __init__(self, auth_token):
+    self.auth_token = auth_token
 
-def bookmark_url(url, title, auth_token):
-  """Bookmark a url. Returns True on success, False otherwise."""
-  request_path = ADD_API_PATH.format(token=auth_token, url=quote(url), title=quote(title))
-  logging.debug('https://'+API_DOMAIN+request_path)
-  response = make_request(API_DOMAIN, request_path)
-  return check_response(response, 'add')
+  def is_url_bookmarked(self, url):
+    """Check if a url is already bookmarked."""
+    request_path = GET_API_PATH.format(token=self.auth_token, url=quote(url))
+    response = make_request(API_DOMAIN, request_path)
+    return check_response(response, 'get')
+
+  def bookmark_url(self, url, title):
+    """Bookmark a url. Returns True on success, False otherwise."""
+    request_path = ADD_API_PATH.format(token=self.auth_token, url=quote(url), title=quote(title))
+    logging.debug('https://'+API_DOMAIN+request_path)
+    response = make_request(API_DOMAIN, request_path)
+    return check_response(response, 'add')
 
 
 def make_request(domain, path):
