@@ -7,6 +7,9 @@ import sys
 import urllib.parse
 import xml.etree.ElementTree
 
+# API documentation: https://pinboard.in/api
+# Get the auth token from https://pinboard.in/settings/password
+
 MAX_RESPONSE = 16384 # bytes
 API_DOMAIN = 'api.pinboard.in'
 GET_API_PATH = '/v1/posts/get?auth_token={token}&url={url}'
@@ -15,6 +18,21 @@ ADD_API_PATH = '/v1/posts/add?auth_token={token}&url={url}&description={title}&t
 
 def quote(string):
   return urllib.parse.quote_plus(string)
+
+
+def is_url_bookmarked(url, auth_token):
+  """Check if a url is already bookmarked."""
+  request_path = GET_API_PATH.format(token=auth_token, url=quote(url))
+  response = make_request(API_DOMAIN, request_path)
+  return check_response(response, 'get')
+
+
+def bookmark_url(url, title, auth_token):
+  """Bookmark a url. Returns True on success, False otherwise."""
+  request_path = ADD_API_PATH.format(token=auth_token, url=quote(url), title=quote(title))
+  logging.debug('https://'+API_DOMAIN+request_path)
+  response = make_request(API_DOMAIN, request_path)
+  return check_response(response, 'add')
 
 
 def make_request(domain, path):
