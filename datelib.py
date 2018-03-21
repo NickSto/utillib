@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 import sys
 import datetime
 
@@ -182,3 +183,25 @@ def increment_datetime(dt, time_unit):
       carry = 0
     dt_dict[this_unit.name] = unit_value
   return datetime.datetime(**dt_dict)
+
+
+def time_str_to_seconds(time_str):
+  """Translate a string like "10m", "10 days", "5 s", etc into seconds.
+  The string must contain an integer followed by a unit, possibly separated by a space.
+  Or, it can just be an integer, assumed to be seconds."""
+  match = re.search(r'^(\d+) ?([^ \d])$', time_str)
+  if match:
+    quantity = int(match.group(1))
+    unit_str = match.group(2)
+  else:
+    try:
+      # It can also just be an integer.
+      return int(time_str)
+    except ValueError:
+      raise ValueError('Time ("{}") is invalid.'.format(time_str))
+  time_unit = UNIT_NAMES.get(unit_str.lower())
+  if not time_unit:
+    time_unit = UNIT_SYMBOLS.get(unit_str)
+  if not time_unit:
+    raise ValueError('Unit ("{}") in time ("{}") is invalid.'.format(unit_str, time_str))
+  return quantity * time_unit.seconds
