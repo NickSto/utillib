@@ -26,6 +26,7 @@ class TimeUnit(object):
 SECOND = TimeUnit(
   name='second',
   abbrev='sec',
+  symbol='s',
   format='%S',
   format_rounded='%Y-%m-%d %H:%M:%S',
   min_value=0,
@@ -36,6 +37,7 @@ SECOND = TimeUnit(
 MINUTE = TimeUnit(
   name='minute',
   abbrev='min',
+  symbol='m',
   format='%M',
   format_rounded='%Y-%m-%d %H:%M',
   min_value=0,
@@ -46,6 +48,7 @@ MINUTE = TimeUnit(
 HOUR = TimeUnit(
   name='hour',
   abbrev='hr',
+  symbol='h',
   format='%H',
   format_rounded='%Y-%m-%d %H:00',
   min_value=0,
@@ -56,6 +59,7 @@ HOUR = TimeUnit(
 DAY = TimeUnit(
   name='day',
   abbrev='day',
+  symbol='d',
   format='%d',
   format_rounded='%Y-%m-%d',
   min_value=1,
@@ -66,6 +70,7 @@ DAY = TimeUnit(
 WEEK = TimeUnit(
   name='week',
   abbrev='week',
+  symbol='w',
   format='%d',
   format_rounded='%Y-%m-%d',
   min_value=0,
@@ -76,6 +81,7 @@ WEEK = TimeUnit(
 MONTH = TimeUnit(
   name='month',
   abbrev='mo',
+  symbol='M',
   format='%b',
   format_rounded='%b %Y',
   min_value=1,
@@ -86,6 +92,7 @@ MONTH = TimeUnit(
 YEAR = TimeUnit(
   name='year',
   abbrev='yr',
+  symbol='y',
   format='%Y',
   format_rounded='%Y',
   min_value=-sys.maxsize,
@@ -95,15 +102,15 @@ YEAR = TimeUnit(
 
 TIME_UNITS = (SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, YEAR)
 
-def _make_unit_names():
-  unit_names = {}
-  for time_unit in TIME_UNITS:
-    unit_names[time_unit.name] = time_unit
-    unit_names[time_unit.name+'s'] = time_unit
-    unit_names[time_unit.abbrev] = time_unit
-  return unit_names
+UNIT_NAMES = {}
+for _time_unit in TIME_UNITS:
+  UNIT_NAMES[_time_unit.name] = _time_unit
+  UNIT_NAMES[_time_unit.name+'s'] = _time_unit
+  UNIT_NAMES[_time_unit.abbrev] = _time_unit
 
-UNIT_NAMES = _make_unit_names()
+UNIT_SYMBOLS = {}
+for _time_unit in TIME_UNITS:
+  UNIT_SYMBOLS[_time_unit.symbol] = _time_unit
 
 MONTH_LENGTHS = {1:31, 2:28, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}
 
