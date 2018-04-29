@@ -13,6 +13,8 @@ import cryptography.hazmat.primitives.kdf.pbkdf2
 assert sys.version_info.major >= 3, 'Python 3 required'
 
 ENCODING = 'utf8'
+DEFAULT_SALT = 'YMvE0GRTrO9_Ix5RAdhqZwAKyk-zYs37O1NDI93kXfI='
+DEFAULT_ITERATIONS = 100000
 DESCRIPTION = """Encrypt or decrypt data."""
 
 
@@ -27,10 +29,10 @@ def make_argparser():
   parser.add_argument('-p', '--password')
   parser.add_argument('-t', '--text', action='store_true',
     help='Use a base64 encoding for the ciphertext.')
-  parser.add_argument('-s', '--salt', default='YMvE0GRTrO9_Ix5RAdhqZwAKyk-zYs37O1NDI93kXfI=',
+  parser.add_argument('-s', '--salt', default=DEFAULT_SALT,
     help='Give a different salt than the default for deriving the key from the password. Note that '
          'the default salt is hardcoded directly into this script and isn\'t a secret.')
-  parser.add_argument('-i', '--iterations', type=int, default=100000,
+  parser.add_argument('-i', '--iterations', type=int, default=DEFAULT_ITERATIONS,
     help='Number of pbkdf2 iterations for deriving the key from the password. Default: %(default)s')
   parser.add_argument('-l', '--log', type=argparse.FileType('w'), default=sys.stderr,
     help='Print log messages to this file instead of to stderr. Warning: Will overwrite the file.')
@@ -110,7 +112,7 @@ def generate_key():
   return str(key, ENCODING)
 
 
-def derive_key(password, salt, iterations):
+def derive_key(password, salt=DEFAULT_SALT, iterations=DEFAULT_ITERATIONS):
   """Derive a key from a password using pbkdf2.
   Give the password and salt as strings.
   Uses SHA-256 as the hash function.
