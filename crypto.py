@@ -28,7 +28,8 @@ def make_argparser():
   parser.add_argument('-t', '--text', action='store_true',
     help='Use a base64 encoding for the ciphertext.')
   parser.add_argument('-s', '--salt', default='YMvE0GRTrO9_Ix5RAdhqZwAKyk-zYs37O1NDI93kXfI=',
-    help='Give a different salt than the default for deriving the key from the password.')
+    help='Give a different salt than the default for deriving the key from the password. Note that '
+         'the default salt is hardcoded directly into this script and isn\'t a secret.')
   parser.add_argument('-i', '--iterations', type=int, default=100000,
     help='Number of pbkdf2 iterations for deriving the key from the password. Default: %(default)s')
   parser.add_argument('-l', '--log', type=argparse.FileType('w'), default=sys.stderr,
