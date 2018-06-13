@@ -326,7 +326,9 @@ def get_headers(default_headers, url):
   user agent spoofing we might've enabled and allow requests to reveal itself."""
   headers = default_headers
   domain = urllib.parse.urlparse(url).netloc
-  if domain in ('youtu.be', 'youtube.com', 'www.youtube.com'):
+  fields = domain.split('.')
+  domain_ending = '.'.join(fields[len(fields)-2:])
+  if domain_ending == 'youtu.be' or (len(fields) >= 2 and fields[len(fields)-2] == 'youtube'):
     headers = default_headers.copy()
     del headers['User-Agent']
   return headers
