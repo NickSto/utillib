@@ -7,6 +7,13 @@ import socket
 import sys
 import urllib.parse
 import xml.etree.ElementTree
+try:
+  import requests
+  import requests.exceptions
+  from bs4 import BeautifulSoup
+except ImportError:
+  requests = None
+  BeautifulSoup = None
 
 # API documentation: https://pinboard.in/api
 # Get the auth token from https://pinboard.in/settings/password
@@ -195,8 +202,26 @@ class Bookmark(Post):
 
 def make_argparser():
   parser = argparse.ArgumentParser()
-  parser.add_argument('bookmarks',
-    help='')
+  subparsers = parser.add_subparsers(dest='command', help='Subcommands')
+  read = subparsers.add_parser('read', help='Read a bookmarks export XML.')
+  read.add_argument('bookmarks',
+    help='The bookmarks file.')
+  bookmark = subparsers.add_parser('bookmark', help='Save a url as a bookmark.')
+  bookmark.add_argument('urls', nargs='?',
+    help='Provide a literal url as the argument, or a file containing urls (one per line). '
+         'If not given, this will read a list of urls from stdin.')
+  bookmark.add_argument('-a', '--auth-token', required=True,
+    help='Your Pinboard API authentication token. Available from '
+         'https://pinboard.in/settings/password')
+  bookmark.add_argument('-t', '--tags', default='automated',
+    help='The tags to save the bookmark(s) with. Use a comma-delimited list. Default: "%(default)s"')
+  parser.add_argument('-l', '--log', type=argparse.FileType('w'), default=sys.stderr,
+    help='Print log messages to this file instead of to stderr. Warning: Will overwrite the file.')
+  volume = parser.add_mutually_exclusive_group()
+  volume.add_argument('-q', '--quiet', dest='volume', action='store_const', const=logging.CRITICAL)
+  volume.add_argument('-v', '--verbose', dest='volume', action='store_const', const=logging.INFO,
+    default=logging.INFO)
+  volume.add_argument('-d', '--debug', dest='volume', action='store_const', const=logging.DEBUG)
   return parser
 
 
@@ -204,8 +229,20 @@ def main(argv):
 
   parser = make_argparser()
   args = parser.parse_args(argv[1:])
+  logging.basicConfig(stream=args.log, level=args.volume, format='%(message)s')
 
-  for post in parse_archive_file(args.bookmarks, 'xml'):
+  if args.command == 'read':
+    read_archive(args.bookmarks)
+  elif args.command == 'bookmark':
+    if requests is None or BeautifulSoup is None:
+      fail('Error: "requests" and "beautifulsoup4" modules are required for saving bookmarks.')
+    urls = read_urls(args.urls)
+    tags = args.tags.split(',')
+    save_bookmarks(urls, args.auth_token, tags=tags)
+
+
+def read_archive(path):
+  for post in parse_archive_file(path, 'xml'):
     print('{}: {}'.format(post.human_time(), post.url))
     if post.type == 'tweet':
       print(post.text)
@@ -213,6 +250,55 @@ def main(argv):
       print(post.title)
       if post.tags:
         print(', '.join(post.tags))
+
+
+def save_bookmarks(urls, auth_token, tags=('automated',)):
+  skipped = 0
+  existing = 0
+  bookmarked = 0
+  api = ApiInterface(auth_token)
+  for url in urls:
+    if api.is_url_bookmarked(url):
+      logging.warning('Already bookmarked: {}'.format(url))
+      existing += 1
+    else:
+      try:
+        response = requests.get(url, timeout=6)
+      except requests.exceptions.RequestException:
+        logging.error('Error making request to {}'.format(url))
+        logging.error('  Could not determine a title. Skipping bookmark..')
+        skipped += 1
+        continue
+      title = get_title(response.text)
+      if not title:
+        logging.warning('No title found for {}'.format(url))
+        title = url
+      success = api.bookmark_url(url, title, tags=tags)
+      if success:
+        logging.info('Successfully bookmarked {}'.format(url))
+        bookmarked += 1
+  logging.warning('{} Successfully bookmarked\n{} Already bookmarked\n{} Skipped due to errors.'
+                  .format(bookmarked, existing, skipped))
+
+
+def get_title(html):
+  if html is None:
+    return None
+  soup = BeautifulSoup(html, 'html.parser')
+  if soup.title:
+    return soup.title.text
+  else:
+    return None
+
+
+def read_urls(urls):
+  if not urls:
+    return (line.rstrip('\r\n') for line in sys.stdin)
+  elif urls.startswith('http://') or urls.startswith('https://'):
+    return [urls]
+  else:
+    with open(urls) as urls_file:
+      return (line.rstrip('\r\n') for line in urls_file)
 
 
 def fail(message):
