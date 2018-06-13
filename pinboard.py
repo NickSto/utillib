@@ -215,13 +215,15 @@ def make_argparser():
          'https://pinboard.in/settings/password')
   bookmark.add_argument('-t', '--tags', default='automated',
     help='The tags to save the bookmark(s) with. Use a comma-delimited list. Default: "%(default)s"')
+  bookmark.add_argument('-d', '--skip-dead-links', action='store_true',
+    help="Don't bookmark urls which return an error HTTP status.")
   parser.add_argument('-l', '--log', type=argparse.FileType('w'), default=sys.stderr,
     help='Print log messages to this file instead of to stderr. Warning: Will overwrite the file.')
   volume = parser.add_mutually_exclusive_group()
   volume.add_argument('-q', '--quiet', dest='volume', action='store_const', const=logging.CRITICAL)
   volume.add_argument('-v', '--verbose', dest='volume', action='store_const', const=logging.INFO,
     default=logging.INFO)
-  volume.add_argument('-d', '--debug', dest='volume', action='store_const', const=logging.DEBUG)
+  volume.add_argument('-D', '--debug', dest='volume', action='store_const', const=logging.DEBUG)
   return parser
 
 
@@ -238,7 +240,7 @@ def main(argv):
       fail('Error: "requests" and "beautifulsoup4" modules are required for saving bookmarks.')
     urls = read_urls(args.urls)
     tags = args.tags.split(',')
-    save_bookmarks(urls, args.auth_token, tags=tags)
+    save_bookmarks(urls, args.auth_token, tags=tags, skip_dead_links=args.skip_dead_links)
 
 
 def read_archive(path):
@@ -252,7 +254,7 @@ def read_archive(path):
         print(', '.join(post.tags))
 
 
-def save_bookmarks(urls, auth_token, tags=('automated',)):
+def save_bookmarks(urls, auth_token, tags=('automated',), skip_dead_links=False):
   skipped = 0
   existing = 0
   bookmarked = 0
@@ -267,6 +269,11 @@ def save_bookmarks(urls, auth_token, tags=('automated',)):
       except requests.exceptions.RequestException:
         logging.error('Error making request to {}'.format(url))
         logging.error('  Could not determine a title. Skipping bookmark..')
+        skipped += 1
+        continue
+      if skip_dead_links and response.status_code >= 400:
+        logging.error('Error: Dead link (status {}): {}'.format(response.status_code, url))
+        logging.error('  Skipping bookmark..')
         skipped += 1
         continue
       title = get_title(response.text)
