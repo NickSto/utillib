@@ -3,6 +3,7 @@ import argparse
 import datetime
 import http.client
 import logging
+import socket
 import sys
 import urllib.parse
 import xml.etree.ElementTree
@@ -13,7 +14,7 @@ import xml.etree.ElementTree
 MAX_RESPONSE = 16384 # bytes
 API_DOMAIN = 'api.pinboard.in'
 GET_API_PATH = '/v1/posts/get?auth_token={token}&url={url}'
-ADD_API_PATH = '/v1/posts/add?auth_token={token}&url={url}&description={title}&tags=tab+automated&replace=no'
+ADD_API_PATH = '/v1/posts/add?auth_token={token}&url={url}&description={title}&tags={tags}&replace=no'
 
 
 def quote(string):
@@ -31,23 +32,41 @@ class ApiInterface(object):
     response = make_request(API_DOMAIN, request_path)
     return check_response(response, 'get')
 
-  def bookmark_url(self, url, title):
+  def bookmark_url(self, url, title, tags=None):
     """Bookmark a url. Returns True on success, False otherwise."""
-    request_path = ADD_API_PATH.format(token=self.auth_token, url=quote(url), title=quote(title))
+    if tags is None:
+      tags_str = 'automated'
+    else:
+      tags_str = make_tags_str(tags)
+    request_path = ADD_API_PATH.format(token=self.auth_token, url=quote(url), title=quote(title),
+                                       tags=tags_str)
     logging.debug('https://'+API_DOMAIN+request_path)
     response = make_request(API_DOMAIN, request_path)
     return check_response(response, 'add')
 
 
+def make_tags_str(tags):
+  tags_strs = []
+  for tag in tags:
+    if ' ' in tag:
+      raise ValueError('Tags cannot contain spaces. Failed on {!r}.'.format(tag))
+    tags_strs.append(quote(str(tag)))
+  return '+'.join(tags_strs)
+
+
 def make_request(domain, path):
-  conex = http.client.HTTPSConnection(domain)
-  #TODO: Both of these steps can throw exceptions. Deal with them.
-  conex.request('GET', path)
+  try:
+    conex = http.client.HTTPSConnection(domain)
+    conex.request('GET', path)
+  except (http.client.HTTPException, socket.gaierror):
+    return None
   return conex.getresponse()
 
 
 def check_response(response, request_type):
-  if response.status == 429:
+  if response is None:
+    fail('Error: Failure making HTTP request to Pinboard API.')
+  elif response.status == 429:
     # API rate limit reached.
     fail('Error: API rate limit reached (429 Too Many Requests).')
   response_body = response.read(MAX_RESPONSE)
@@ -201,7 +220,7 @@ def fail(message):
   if __name__ == '__main__':
     sys.exit(1)
   else:
-    raise Exception('Unrecoverable error')
+    raise Exception(message)
 
 
 if __name__ == '__main__':
