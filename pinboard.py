@@ -217,6 +217,12 @@ def make_argparser():
     help='The tags to save the bookmark(s) with. Use a comma-delimited list. Default: "%(default)s"')
   bookmark.add_argument('-d', '--skip-dead-links', action='store_true',
     help="Don't bookmark urls which return an error HTTP status.")
+  bookmark.add_argument('-A', '--user-agent',
+    default='Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0',
+    help='User agent to give when making requests to the urls. Default: "%(default)s"')
+  bookmark.add_argument('-n', '--simulate', action='store_true',
+    help='Only simulate the process, printing the tabs which will be archived but without actually '
+         'doing it.')
   parser.add_argument('-l', '--log', type=argparse.FileType('w'), default=sys.stderr,
     help='Print log messages to this file instead of to stderr. Warning: Will overwrite the file.')
   volume = parser.add_mutually_exclusive_group()
@@ -240,7 +246,8 @@ def main(argv):
       fail('Error: "requests" and "beautifulsoup4" modules are required for saving bookmarks.')
     urls = read_urls(args.urls)
     tags = args.tags.split(',')
-    save_bookmarks(urls, args.auth_token, tags=tags, skip_dead_links=args.skip_dead_links)
+    save_bookmarks(urls, args.auth_token, tags=tags, simulate=args.simulate,
+                   skip_dead_links=args.skip_dead_links, user_agent=args.user_agent)
 
 
 def read_archive(path):
@@ -254,38 +261,75 @@ def read_archive(path):
         print(', '.join(post.tags))
 
 
-def save_bookmarks(urls, auth_token, tags=('automated',), skip_dead_links=False):
+def save_bookmarks(urls, auth_token, tags=('automated',), simulate=False, skip_dead_links=False,
+                   user_agent=None):
+  if user_agent is None:
+    headers = {}
+  else:
+    headers = {'User-Agent': user_agent}
   skipped = 0
   existing = 0
   bookmarked = 0
   api = ApiInterface(auth_token)
   for url in urls:
-    if api.is_url_bookmarked(url):
+    if not simulate and api.is_url_bookmarked(url):
       logging.warning('Already bookmarked: {}'.format(url))
       existing += 1
     else:
+      instance_headers = get_headers(headers, url)
       try:
-        response = requests.get(url, timeout=6)
+        response = requests.get(url, timeout=6, headers=instance_headers)
       except requests.exceptions.RequestException:
         logging.error('Error making request to {}'.format(url))
         logging.error('  Could not determine a title. Skipping bookmark..')
         skipped += 1
         continue
+      except AttributeError as error:
+        # Catching exception due to bug https://github.com/requests/requests/issues/3807
+        if error.args[0] == "'NoneType' object has no attribute 'readline'":
+          logging.error('Error making request to {}'.format(url))
+          logging.error("  The server sent a response requests couldn't handle. Skipping bookmark..")
+          skipped += 1
+          continue
+        else:
+          raise
       if skip_dead_links and response.status_code >= 400:
         logging.error('Error: Dead link (status {}): {}'.format(response.status_code, url))
         logging.error('  Skipping bookmark..')
         skipped += 1
         continue
       title = get_title(response.text)
-      if not title:
+      if title:
+        logging.info('Found title {!r}'.format(title))
+      else:
         logging.warning('No title found for {}'.format(url))
         title = url
-      success = api.bookmark_url(url, title, tags=tags)
-      if success:
-        logging.info('Successfully bookmarked {}'.format(url))
+      if simulate:
+        logging.info('Bookmarking simulated only for '+url)
         bookmarked += 1
-  logging.warning('{} Successfully bookmarked\n{} Already bookmarked\n{} Skipped due to errors.'
-                  .format(bookmarked, existing, skipped))
+      else:
+        success = api.bookmark_url(url, title, tags=tags)
+        if success:
+          logging.info('Successfully bookmarked {}'.format(url))
+          bookmarked += 1
+  if simulate:
+    adverb = 'Simulatedly'
+  else:
+    adverb = 'Successfully'
+  logging.warning('{} {} bookmarked\n{} Already bookmarked\n{} Skipped due to errors.'
+                  .format(bookmarked, adverb, existing, skipped))
+
+
+def get_headers(default_headers, url):
+  """Modify headers for specific sites.
+  Youtube actually sends a more easily parsable response to robots than to browsers. So remove any
+  user agent spoofing we might've enabled and allow requests to reveal itself."""
+  headers = default_headers
+  domain = urllib.parse.urlparse(url).netloc
+  if domain in ('youtu.be', 'youtube.com', 'www.youtube.com'):
+    headers = default_headers.copy()
+    del headers['User-Agent']
+  return headers
 
 
 def get_title(html):
@@ -293,7 +337,7 @@ def get_title(html):
     return None
   soup = BeautifulSoup(html, 'html.parser')
   if soup.title:
-    return soup.title.text
+    return soup.title.text.strip()
   else:
     return None
 
