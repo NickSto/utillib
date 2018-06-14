@@ -72,11 +72,13 @@ def make_request(domain, path):
 
 def check_response(response, request_type):
   if response is None:
-    fail('Error: Failure making HTTP request to Pinboard API.')
+    fail('Failure making HTTP request to Pinboard API.')
   elif response.status == 429:
     # API rate limit reached.
-    fail('Error: API rate limit reached (429 Too Many Requests).')
-  response_body = response.read(MAX_RESPONSE)
+    fail('API rate limit reached (429 Too Many Requests).')
+  elif response.status == 401:
+    fail('Received 401 Forbidden. Are you using the right API token?')
+  response_body = str(response.read(MAX_RESPONSE), 'utf8')
   if request_type == 'get':
     return parse_get_response(response_body)
   elif request_type == 'add':
@@ -106,7 +108,7 @@ def parse_get_response(response_body):
       fail('Error: Received message "{}" when checking if tab is already bookmarked.'
            .format(root.attrib['code']))
     else:
-      fail('Error 1: Unrecognized response from API:\n'+response_body)
+      fail('Error 1: Unrecognized response from API:\n{}'+response_body)
   else:
     fail('Error 2: Unrecognized response from API:\n'+response_body)
 
