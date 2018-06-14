@@ -3,6 +3,7 @@ import argparse
 import datetime
 import http.client
 import logging
+import re
 import socket
 import sys
 import time
@@ -347,7 +348,11 @@ def get_title(html):
     return None
   soup = BeautifulSoup(html, 'html.parser')
   if soup.title:
-    return soup.title.text.strip()
+    # Remove whitespace from the ends of the title string.
+    title = soup.title.text.strip()
+    # Replace runs of whitespace (including newlines, tabs, etc) with a single space.
+    title = re.sub(r'\s+', ' ', title)
+    return title
   else:
     return None
 
