@@ -5,6 +5,7 @@ import http.client
 import logging
 import socket
 import sys
+import time
 import urllib.parse
 import xml.etree.ElementTree
 try:
@@ -222,6 +223,9 @@ def make_argparser():
   bookmark.add_argument('-A', '--user-agent',
     default='Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0',
     help='User agent to give when making requests to the urls. Default: "%(default)s"')
+  parser.add_argument('-p', '--pause', type=float, default=1,
+    help='A time to wait in-between requests to the Pinboard API. The documentation recommends 3 '
+         'seconds: https://pinboard.in/api Default: %(default)s')
   bookmark.add_argument('-n', '--simulate', action='store_true',
     help='Only simulate the process, printing the tabs which will be archived but without actually '
          'doing it.')
@@ -248,7 +252,7 @@ def main(argv):
       fail('Error: "requests" and "beautifulsoup4" modules are required for saving bookmarks.')
     urls = read_urls(args.urls)
     tags = args.tags.split(',')
-    save_bookmarks(urls, args.auth_token, tags=tags, simulate=args.simulate,
+    save_bookmarks(urls, args.auth_token, tags=tags, simulate=args.simulate, pause=args.pause,
                    skip_dead_links=args.skip_dead_links, user_agent=args.user_agent)
 
 
@@ -264,7 +268,7 @@ def read_archive(path):
 
 
 def save_bookmarks(urls, auth_token, tags=('automated',), simulate=False, skip_dead_links=False,
-                   user_agent=None):
+                   user_agent=None, pause=1):
   if user_agent is None:
     headers = {}
   else:
@@ -274,6 +278,7 @@ def save_bookmarks(urls, auth_token, tags=('automated',), simulate=False, skip_d
   bookmarked = 0
   api = ApiInterface(auth_token)
   for url in urls:
+    time.sleep(pause)
     if not simulate and api.is_url_bookmarked(url):
       logging.warning('Already bookmarked: {}'.format(url))
       existing += 1
@@ -310,6 +315,7 @@ def save_bookmarks(urls, auth_token, tags=('automated',), simulate=False, skip_d
         logging.info('Bookmarking simulated only for '+url)
         bookmarked += 1
       else:
+        time.sleep(pause)
         success = api.bookmark_url(url, title, tags=tags)
         if success:
           logging.info('Successfully bookmarked {}'.format(url))
