@@ -82,7 +82,9 @@ def main(argv):
       fail('Error: Invalid key.')
 
   if args.command == 'encrypt':
-    if args.file == '-':
+    if args.file is None:
+      fail('Error: Must provide a file to encrypt or "-" to read from stdin.')
+    elif args.file == '-':
       plaintext = sys.stdin.read()
     else:
       with open(args.file) as infile:
@@ -93,7 +95,9 @@ def main(argv):
     else:
       sys.stdout.buffer.write(cipherthing)
   elif args.command == 'decrypt':
-    if args.file == '-':
+    if args.file is None:
+      fail('Error: Must provide a file to dencrypt or "-" to read from stdin.')
+    elif args.file == '-':
       infile = sys.stdin
     elif args.text:
       with open(args.file) as infile:
