@@ -2,8 +2,11 @@
 """A wrapper for textwrap, to simplify its usage and add an important
 capability."""
 import textwrap
-import console
-__version__ = '0.7'
+try:
+  import console
+except ImportError:
+  from . import console
+__version__ = '0.8'
 
 DEFAULT_WIDTH = 70
 
