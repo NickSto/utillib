@@ -8,7 +8,11 @@ import sys
 import argparse
 import subprocess
 import collections
-import ConfigParser
+PY3 = sys.version_info.major >= 3
+if PY3:
+  import configparser
+else:
+  import ConfigParser as configparser
 
 # _SCRIPT_DIR is the parent directory of _THIS_DIR, the directory this script is in. Since this will
 # usually be included as a module in the "lib" submodule of a project, if we used this file's
@@ -103,7 +107,10 @@ def _run_command(command, strip_newline=False):
   if exit_status is None or exit_status != 0:
     return None
   elif strip_newline:
-    return output.rstrip('\r\n')
+    if PY3:
+      return str(output, 'utf8').rstrip('\r\n')
+    else:
+      return output.rstrip('\r\n')
   else:
     return output
 
@@ -113,17 +120,17 @@ def _read_config(config_path):
   Return None on failure."""
   KEYS = ('project', 'version_num', 'stage')
   data = collections.defaultdict(lambda: None)
-  config = ConfigParser.RawConfigParser()
+  config = configparser.RawConfigParser()
   try:
     result = config.read(config_path)
-  except ConfigParser.Error:
+  except configparser.Error:
     return None
   if not result:
     return None
   for key in KEYS:
     try:
       data[key] = config.get('version', key)
-    except ConfigParser.Error:
+    except configparser.Error:
       pass
   return data
 
