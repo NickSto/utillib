@@ -6,11 +6,11 @@ try:
   import console
 except ImportError:
   from . import console
-__version__ = '0.8'
+__version__ = '0.9'
 
 DEFAULT_WIDTH = 70
 
-def wrap(text, width=None, indent=0, lspace=0, **kwargs):
+def wrap(text, width=None, width_mod=None, indent=0, lspace=0, **kwargs):
   """Take any input text and return output where no line is longer than "width".
   It preserves existing newlines, unlike textwrap. So it will simply look at
   each line, and if it's longer than "width" it will break it there. This
@@ -27,17 +27,17 @@ def wrap(text, width=None, indent=0, lspace=0, **kwargs):
   All other keyword arguments will be passed to textwrap.wrap(). N.B.: if
   "subsequent_indent" or "initial_indent" are given, then "lspace" and
   "indent" will be ignored."""
-  wrapper = Wrapper(width=width, indent=indent, lspace=lspace, **kwargs)
+  wrapper = Wrapper(width=width, indent=indent, lspace=lspace, width_mod=width_mod, **kwargs)
   return wrapper.wrap(text)
 
 
-def wrapper(width=None, indent=0, lspace=0, **kwargs):
+def wrapper(width=None, width_mod=None, indent=0, lspace=0, **kwargs):
   """Return a function that performs wrapping with the same settings each time.
   Allows defining a shorthand for the full wrap function:
   wrap_short = simplewrapper.wrapper(width=70, indent=4)
   print wrap_short('Now you can just give this argument the text, and it will '
     +'wrap it to 70 characters with an indent of 4 each time.')"""
-  return lambda text: wrap(text, width, indent, lspace, **kwargs)
+  return lambda text: wrap(text, width, width_mod, indent, lspace, **kwargs)
 
 
 class Wrapper(object):
@@ -46,21 +46,26 @@ class Wrapper(object):
   to provide the text itself to the wrap() function. But you can also change
   certain attributes after creation."""
 
-  def __init__(self, width=None, indent=0, lspace=0, **kwargs):
+  def __init__(self, width=None, width_mod=None, indent=0, lspace=0, **kwargs):
     self._textwrapper = textwrap.TextWrapper(**kwargs)
     if width is None:
       self.width = console.termwidth(DEFAULT_WIDTH)
+    if width_mod is not None:
+      self.width += width_mod
     if not (kwargs.get('subsequent_indent') or kwargs.get('initial_indent')):
       self.lspace = lspace
       self.indent = indent
 
-  def wrap(self, text, width=None, indent=None, lspace=None):
+  def wrap(self, text, width=None, width_mod=None, indent=None, lspace=None):
     """Note: Attributes given here are temporary (only take effect for this
     invocation of wrap())."""
     # set temporary attributes
-    if width is not None:
+    if width is not None or width_mod is not None:
       width_old = self.width
+    if width is not None:
       self.width = width
+    if width_mod is not None:
+      self.width += width_mod
     if lspace is not None:
       lspace_old = self.lspace
       self.lspace = lspace
@@ -73,7 +78,7 @@ class Wrapper(object):
       wrapped.extend(self._textwrapper.wrap(line))
     wrapped_str = '\n'.join(wrapped)
     # restore permanent attributes
-    if width is not None:
+    if width is not None or width_mod is not None:
       self.width = width_old
     if lspace is not None:
       self.lspace = lspace_old
