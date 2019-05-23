@@ -139,14 +139,23 @@ def _make_argparser():
   parser = argparse.ArgumentParser()
   parser.add_argument('-c', '--config-path', default=os.path.join(_THIS_DIR, _DEFAULT_CONFIG_FILENAME))
   parser.add_argument('-r', '--repo-dir', default=_THIS_DIR)
+  parser.add_argument('-p', '--get-key',
+    help='Just read the VERSION file (the --config-path), and print the value of this key from the '
+         '[version] section.')
   return parser
 
 
 def _main(argv):
   parser = _make_argparser()
   args = parser.parse_args(argv[1:])
-  version = get_version(config_path=args.config_path, repo_dir=args.repo_dir)
-  print(version)
+  if args.get_key:
+    config = _read_config(args.config_path)
+    value = config[args.get_key]
+    if value:
+      print(value)
+  else:
+    version = get_version(config_path=args.config_path, repo_dir=args.repo_dir)
+    print(version)
 
 
 if __name__ == '__main__':
