@@ -1,0 +1,31 @@
+# This file includes all categories, to document them, but you can omit any of them.
+included:
+  absolute:
+    recursive:
+      - ~/aa
+    exact:
+      - ~/.bashrc
+  relative:
+    recursive:
+      - code
+    exact:
+      - accounts.txt
+excluded:
+  absolute:
+    recursive:
+      - ~/.config/google-chrome
+      - ~/.config
+    exact:
+      - ~/.config/dconf/user
+      - ~/.config/evince/accels
+      - /usr/bin
+  relative:
+    recursive:
+      - .git
+      - __pycache__
+    exact:
+      - .git/config
+  ext:
+    - pyc
+    - ods#
+    - odt#
