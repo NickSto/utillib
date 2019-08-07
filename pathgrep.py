@@ -20,8 +20,8 @@ def make_argparser():
   input.add_argument('infile', type=argparse.FileType('r'), default=sys.stdin, nargs='?',
     help='Input file. Default: stdin')
   input.add_argument('-f', '--fields', type=csv_int,
-    help='Column(s) to match. Accepts a comma-delimited list. If multiple columns are given, the '
-      'line will be printed if any of the values is judged to be included. '
+    help='1-based column(s) to match. Accepts a comma-delimited list. If multiple columns are '
+      'given, the line will be printed if any of the values is judged to be included. '
       'Default: interpret the entire line as a single path.')
   input.add_argument('-d', '--delim',
     help="Field delimiter. You can use regular escape-character syntax for the following "
@@ -134,7 +134,7 @@ def parse_line(line_raw, fields, delim, error_handling, line_num):
   else:
     field_values = split_line(line_raw, delim)
     try:
-      return [pathlib.Path(field_values[field]) for field in fields]
+      return [pathlib.Path(field_values[field-1]) for field in fields]
     except IndexError:
       if error_handling != 'silent':
         logging.warning('Warning: Field out of range in line {}.'.format(line_num+1))
