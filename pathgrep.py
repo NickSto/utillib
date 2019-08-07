@@ -27,21 +27,27 @@ def make_argparser():
     help="Field delimiter. You can use regular escape-character syntax for the following "
       "characters: '"+"', '".join(ESCAPE_CHARS.keys())+"'. Default: whitespace")
   filters = parser.add_argument_group('Filtering')
-  filters.add_argument('-F', '--filters', metavar='filters.yaml', type=argparse.FileType('r'),
-    help='Filter paths according to the criteria in this yaml file.')
   filters.add_argument('-i', '--include', nargs=3, action='append',
     metavar=('[absolute|relative]', '[recursive|exact]', 'path'),
     help='Include lines matching this path. If inclusion rules are given, this uses a default-'
-         'exclude model where only lines matching an include rule are output. If only exclude '
-         'rules are given, it includes every line unless it matches an exclude rule. If both '
-         "include and exclude rules are given, it's still default-exclude, but if the path matches "
-         'both an include and exclude rule, exclusion takes precedence. If no rules are given, it '
-         'will not include any line.')
+      'exclude model where only lines matching an include rule are output. If only exclude rules '
+      'are given, it includes every line unless it matches an exclude rule. If both include and '
+      "exclude rules are given, it's still default-exclude, but if the path matches both an "
+      'include and exclude rule, exclusion takes precedence. '
+      'If no rules are given, it will not include any line.')
   filters.add_argument('-x', '--exclude', nargs=3, action='append',
     metavar=('[absolute|relative]', '[recursive|exact]', 'path'),
     help='Exclude lines matching this path.')
   filters.add_argument('-e', '--ext', nargs=2, action='append', metavar=('[include|exclude]', 'ext'),
     help='Include or exclude lines with paths matching this extension.')
+  filters.add_argument('-F', '--filters', metavar='filters.yaml', type=argparse.FileType('r'),
+    help='Filter paths according to the criteria in this yaml file. See example for structure.')
+  filters.add_argument('-I', '--include-file', metavar='include.yaml', type=argparse.FileType('r'),
+    help='Add inclusion rules using a yaml file like the one for --filter, except starting one '
+      'level lower (at the level of keys {}).'
+      .format(', '.join([repr(key) for key in make_blank_criteria().keys()])))
+  filters.add_argument('-X', '--exclude-file', metavar='exclude.yaml', type=argparse.FileType('r'),
+    help='Same as --include-file, but for exclusions.')
   logs = parser.add_argument_group('Logging')
   logs.add_argument('-l', '--log', type=argparse.FileType('w'), default=sys.stderr,
     help='Print log messages to this file instead of to stderr. Warning: Will overwrite the file.')
@@ -61,9 +67,13 @@ def main(argv):
   logging.basicConfig(stream=args.log, level=args.volume, format='%(message)s')
 
   if args.filters:
-    filters = parse_filters(args.filters)
+    filters = parse_filters_file(args.filters)
   else:
     filters = make_blank_filters()
+  if args.include_file:
+    filters['included'], filters['has_included'] = parse_criteria_file(args.include_file)
+  if args.exclude_file:
+    filters['excluded'], filters['has_excluded'] = parse_criteria_file(args.exclude_file)
 
   parse_rules_args(filters, args.include, args.exclude, args.ext)
 
@@ -162,8 +172,8 @@ def make_blank_criteria():
   }
 
 
-def parse_filters(filters_file):
-  assert yaml is not None, 'yaml module not present.'
+def parse_filters_file(filters_file):
+  assert yaml is not None, 'yaml module required to parse filters file.'
   filters = {}
   filters_data = yaml.safe_load(filters_file)
   excluded, has_excluded = parse_criteria(filters_data.get('excluded', {}))
@@ -172,6 +182,18 @@ def parse_filters(filters_file):
     'excluded':excluded, 'has_excluded':has_excluded,
     'included':included, 'has_included':has_included,
   }
+
+
+def parse_criteria_file(criteria_file):
+  assert yaml is not None, 'yaml module required to parse included/excluded files.'
+  criteria_data = yaml.safe_load(criteria_file)
+  root_keys = make_blank_criteria().keys()
+  assert any([key in criteria_data for key in root_keys]), (
+    'Included/excluded yaml file contains none of the recognized top-level keys. At least one of '
+    "{} must be present. Saw instead: {}."
+    .format(', '.join([repr(key) for key in root_keys]),
+            ', '.join([repr(key) for key in criteria_data.keys()])))
+  return parse_criteria(criteria_data)
 
 
 def parse_criteria(criteria_data):
