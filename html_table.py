@@ -7,10 +7,10 @@ except ImportError:
 
 RawRow = List[Union['Cell',Dict[str,Any]]]
 RawRows = Optional[Union[RawRow,List[RawRow]]]
-Rows = List[List['Cell']]
 
 DEFAULT_HEADER_STYLE = {'bold':True}
 BORDER_STYLE = '1px solid black'
+
 
 class Table:
   def __init__(self, body: RawRows=None, header: RawRows=None, header_len: int=None,
@@ -43,16 +43,15 @@ class Table:
     `header_len` can be used to divide a single `body` into header and body sections. Give the
     number of rows of the `body` that should be removed and stored in the `header`.
     """.format(BORDER_STYLE, DEFAULT_HEADER_STYLE)
-    if header is None and header_len is not None and body is not None:
-      self.header = table_dict_to_cells(body[:header_len])
-      self.body = table_dict_to_cells(body[header_len:])
-    else:
-      self.header = table_dict_to_cells(header)
-      self.body = table_dict_to_cells(body)
     if header_style is None:
-      self.header_style = DEFAULT_HEADER_STYLE.copy()
+      header_style = DEFAULT_HEADER_STYLE.copy()
+    self.header_style = header_style
+    if header is None and header_len is not None and body is not None:
+      self.header = Rows(body[:header_len], header=True)
+      self.body = Rows(body[header_len:])
     else:
-      self.header_style = header_style
+      self.header = Rows(header, header=True)
+      self.body = Rows(body)
     self.align = align
     self.font = font
     self.size = size
@@ -70,6 +69,10 @@ class Table:
   def rows(self):
     return self.header + self.body
 
+  def __iter__(self):
+    for row in self.rows:
+      yield row
+
   def __getitem__(self, index: int):
     if index < len(self.header):
       return self.header[index]
@@ -78,23 +81,24 @@ class Table:
       return self.body[bindex]
 
   def __str__(self):
+    html_lines = []
     style_str = get_style_str(**vars(self))
     if style_str:
-      attributes_html = ' '+style_str
+      html_lines.append(f'<table {style_str}>')
     else:
-      attributes_html = ''
-    html_lines = [f'<table{attributes_html}>']
-    for section, rows in (('header', self.header), ('body', self.body)):
-      for row in rows:
-        html_lines.append('  <tr>')
-        for cell in row:
-          if section == 'header':
-            final_cell = cell.copy()
-            final_cell.apply(overwrite=False, header=True, **self.header_style)
-          else:
-            final_cell = cell
-          html_lines.append('    '+str(final_cell))
-        html_lines.append('  </tr>')
+      html_lines.append('<table>')
+    if self.header:
+      style_str = get_style_str(**self.header_style)
+      if style_str:
+        html_lines.append(f'  <thead {style_str}>')
+      else:
+        html_lines.append('  <thead>')
+      html_lines.append(str(self.header))
+      html_lines.append('  </thead>')
+    if self.body:
+      html_lines.append('  <tbody>')
+      html_lines.append(str(self.body))
+      html_lines.append('  </tbody>')
     html_lines.append('</table>')
     return '\n'.join(html_lines)
 
@@ -143,44 +147,128 @@ class Table:
           c_pos += 1
 
 
-def table_dict_to_cells(raw_rows: RawRows) -> Rows:
-  rows: Rows = []
-  if not raw_rows:
-    return rows
-  elif isinstance(raw_rows[0], str) or not isinstance(raw_rows[0], collections.abc.Iterable):
-    # It's a single row.
-    raw_row = cast(RawRow, raw_rows)
-    raw_rows = [raw_row]
-  for raw_row in raw_rows:
-    row = []
+class ListLike:
+
+  def __init__(self, item_type):
+    self._items = []
+    self.item_type = item_type
+
+  def _cast(self, item):
+    if isinstance(item, self.item_type):
+      return item
+    else:
+      return self.item_type(item)
+
+  def __getitem__(self, index):
+    return self._items[index]
+
+  def __setitem__(self, index, item):
+    self._items[index] = self._cast(item)
+
+  def __len__(self):
+    return len(self._items)
+
+  def __add__(self, other):
+    return self._items + other._items
+
+  def __iter__(self):
+    for item in self._items:
+      yield item
+
+  def append(self, item):
+    self._items.append(self._cast(item))
+
+
+class CellGroup(ListLike):
+
+  def __repr__(self):
+    class_name = type(self).__name__
+    if self.header is None:
+      header_str = ''
+    else:
+      header_str = f', header={self.header}'
+    return f'{class_name}({self._items!r}{header_str})'
+
+
+class Rows(CellGroup):
+
+  def __init__(self, raw_rows: RawRows=None, header=False):
+    super().__init__(Row)
+    self._items: List[Row]
+    self.header = header
+    if not raw_rows:
+      raw_rows = cast(RawRows, [])
+    elif isinstance(raw_rows[0], str) or not isinstance(raw_rows[0], collections.abc.Iterable):
+      # It's a single row.
+      raw_row = cast(RawRow, raw_rows)
+      raw_rows = [raw_row]
+    for raw_row in raw_rows:
+      self.append(raw_row)
+
+  def __str__(self):
+    html_lines = []
+    for row in self:
+      copy = row.copy()
+      if copy.header is None:
+        copy.header = self.header
+      html_lines.append(str(copy))
+    return '\n'.join(html_lines)
+
+
+class Row(CellGroup):
+
+  def __init__(self, raw_row: RawRow=None, header=None):
+    super().__init__(Cell)
+    self._items: List[Cell]
+    self.header = header
+    if not raw_row:
+      raw_row = []
     for raw_cell in raw_row:
-      if isinstance(raw_cell, Cell):
-        cell = raw_cell
-      elif isinstance(raw_cell, collections.abc.Mapping):
-        cell = Cell(**raw_cell)
+      self.append(raw_cell)
+
+  def copy(self):
+    return type(self)(self, header=self.header)
+
+  def __str__(self):
+    html_lines = []
+    html_lines.append('    <tr>')
+    for cell in self:
+      if self.header != cell.header:
+        final_cell = cell.copy()
+        final_cell.header = self.header
       else:
-        cell = Cell(value=raw_cell)
-      row.append(cell)
-    rows.append(row)
-  return rows
+        final_cell = cell
+      html_lines.append('      '+str(final_cell))
+    html_lines.append('    </tr>')
+    return '\n'.join(html_lines)
 
 
 class Cell:
-  def __init__(
-      self, value: Any=None, header=None, width=1, height=1, align='left', font: str=None,
-      size: str=None, bold: bool=None, borders: Union[str,Sequence[str],Set[str]]=None,
-      css: Union[str,Sequence[str],Mapping[str,Any]]=None,
-    ):
-    self.value = value
-    self.header = header
-    self.width = width
-    self.height = height
-    self.align = align
-    self.font = font
-    self.size = size
-    self.bold = bold
-    self.borders = borders
-    self.css = css
+
+  METADATA = {
+    'header': {'default':False, 'type':bool},
+    'width':  {'default':1, 'type':int},
+    'height': {'default':1, 'type':int},
+    'align':  {'default':'left', 'type':str},
+    'font':   {'default':None, 'type':str},
+    'size':   {'default':None, 'type':str},
+    'bold':   {'default':False, 'type':bool},
+    'borders':{'default':set(), 'type':set, 'raw_type':Union[str,Sequence[str],Set[str]]},
+    'css':    {'default':{}, 'type':dict, 'raw_type':Union[str,Sequence[str],Mapping[str,Any]]},
+  }
+
+  def __init__(self, raw_cell: Any=None, value: Any=None, **kwargs):
+    if isinstance(raw_cell, type(self)):
+      type(self).copy(raw_cell, self)
+      return
+    self.init_attrs(**kwargs)
+    if isinstance(raw_cell, collections.abc.Mapping):
+      self.value = raw_cell.get('value')
+      self.init_attrs(**raw_cell)
+    elif raw_cell is None:
+      self.value = value
+    else:
+      self.value = raw_cell
 
   @property
   def borders(self):
@@ -191,6 +279,7 @@ class Cell:
     if isinstance(value, str):
       self._borders = set((value,))
     elif isinstance(value, collections.abc.Iterable):
+      # A `set` is an iterable too.
       self._borders = set(value)
     elif value is None:
       self._borders = set()
@@ -205,6 +294,16 @@ class Cell:
   def css(self, value):
     self._css = parse_css(value)
 
+  def init_attrs(self, **kwargs):
+    for attr, metadata in self.METADATA.items():
+      if attr in kwargs:
+        raw_value = kwargs[attr]
+      else:
+        raw_value = metadata['default']
+      # Don't know if this cast really accomplishes anything, but why not.
+      value = cast(metadata['type'], raw_value)
+      setattr(self, attr, value)
+
   def apply(self, overwrite=True, **kwargs):
     """Set several properties at once."""
     for key, value in kwargs.items():
@@ -218,18 +317,28 @@ class Cell:
         elif getattr(self, key) is None:
           setattr(self, key, value)
 
-  def copy(self):
-    copy = type(self)()
+  def copy(self, copy: 'Cell'=None):
+    if copy is None:
+      copy = type(self)()
     if hasattr(self.value, 'copy'):
       copy.value = self.value.copy()
     else:
       copy.value = self.value
-    copy.borders = set(self.borders)
-    copy.css = dict(self.css)
-    for attr in 'width', 'height', 'align', 'font', 'size', 'bold':
-      value = getattr(self, attr)
-      setattr(copy, attr, value)
+    copy.init_attrs(**vars(self))
     return copy
+
+  def __repr__(self):
+    class_name = type(self).__name__
+    kwarg_pairs = []
+    if self.value is not None:
+      kwarg_pairs.append(('value', repr(self.value)))
+    for attr, metadata in self.METADATA.items():
+      value = getattr(self, attr)
+      if value != metadata['default']:
+        kwarg_pairs.append((attr, repr(value)))
+    kwarg_strs = [f'{attr}={value}' for attr, value in kwarg_pairs]
+    kwarg_str = ', '.join(kwarg_strs)
+    return f'{class_name}({kwarg_str})'
 
   def __str__(self):
     attributes = []
