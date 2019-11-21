@@ -1,5 +1,5 @@
 import collections.abc
-from typing import Any, Union, Optional, Sequence, Mapping, Dict, List, Set, cast
+from typing import Any, Union, Optional, Sequence, Mapping, Generator, Iterable, Dict, List, Tuple, Set, cast
 try:
   from IPython.display import HTML
 except ImportError:
@@ -7,15 +7,48 @@ except ImportError:
 
 RawRow = List[Union['Cell',Dict[str,Any]]]
 RawRows = Optional[Union[RawRow,List[RawRow]]]
+RawStyle = Union['Style',Dict[str,Any]]
 
 DEFAULT_HEADER_STYLE = {'bold':True}
 BORDER_STYLE = '1px solid black'
 
 
-class Table:
+class Styled:
+
+  def init_style(self, kwargs: Dict[str,Any]) -> Set[str]:
+    unused = set()
+    style_kwargs = {}
+    for key, value in kwargs.items():
+      if key in Style.METADATA:
+        style_kwargs[key] = value
+      else:
+        unused.add(key)
+    self.style = style_kwargs
+    return unused
+
+  def __getattr__(self, attr: str) -> Any:
+    if attr in Style.METADATA:
+      return getattr(self.style, attr)
+    else:
+      object.__getattr__(self, attr)
+
+  def __setattr__(self, attr: str, value: Any):
+    if attr == 'style':
+      if isinstance(value, Style):
+        object.__setattr__(self, 'style', value)
+      elif isinstance(value, collections.abc.Mapping):
+        object.__setattr__(self, 'style', Style(**value))
+      else:
+        raise ValueError(f"'style' attribute can only be set to a Style object or a mapping.")
+    elif attr in Style.METADATA:
+      setattr(self.style, attr, value)
+    else:
+      object.__setattr__(self, attr, value)
+
+
+class Table(Styled):
   def __init__(self, body: RawRows=None, header: RawRows=None, header_len: int=None,
-    header_style: Dict[str,Any]=None, align='left', font: str=None, size: str=None,
-    css: Union[str,Sequence[str]]=None
+    header_style: RawStyle=None, **kwargs: Mapping[str,Any]
   ):
     """This represents an HTML table.
     For the table body and header, give a list of lists, one per row of the table.
@@ -45,60 +78,46 @@ class Table:
     """.format(BORDER_STYLE, DEFAULT_HEADER_STYLE)
     if header_style is None:
       header_style = DEFAULT_HEADER_STYLE.copy()
-    self.header_style = header_style
     if header is None and header_len is not None and body is not None:
       self.header = Rows(body[:header_len], header=True)
       self.body = Rows(body[header_len:])
     else:
       self.header = Rows(header, header=True)
       self.body = Rows(body)
-    self.align = align
-    self.font = font
-    self.size = size
-    self.css = css
+    self.header.style = header_style
+    self.init_style(kwargs)
 
   @property
-  def css(self):
-    return self._css
+  def header_style(self) -> 'Style':
+    return self.header.style
 
-  @css.setter
-  def css(self, value):
-    self._css = parse_css(value)
+  @header_style.setter
+  def header_style(self, raw_style: RawStyle):
+    self.header.style = raw_style
 
   @property
-  def rows(self):
+  def rows(self) -> 'Rows':
     return self.header + self.body
 
-  def __iter__(self):
+  def __iter__(self) -> Generator['Row',None,None]:
     for row in self.rows:
       yield row
 
-  def __getitem__(self, index: int):
+  def __getitem__(self, index: int) -> 'Row':
     if index < len(self.header):
       return self.header[index]
     else:
       bindex = index - len(self.header)
       return self.body[bindex]
 
-  def __str__(self):
+  def __str__(self) -> str:
     html_lines = []
-    style_str = get_style_str(**vars(self))
-    if style_str:
-      html_lines.append(f'<table {style_str}>')
-    else:
-      html_lines.append('<table>')
+    attr_str = self.style.to_attr_str()
+    html_lines.append(f'<table{attr_str}>')
     if self.header:
-      style_str = get_style_str(**self.header_style)
-      if style_str:
-        html_lines.append(f'  <thead {style_str}>')
-      else:
-        html_lines.append('  <thead>')
       html_lines.append(str(self.header))
-      html_lines.append('  </thead>')
     if self.body:
-      html_lines.append('  <tbody>')
       html_lines.append(str(self.body))
-      html_lines.append('  </tbody>')
     html_lines.append('</table>')
     return '\n'.join(html_lines)
 
@@ -126,7 +145,6 @@ class Table:
       rows = self.rows
     # Add border styles.
     #TODO: Keep track of actual `r` vertical position, taking into account `height`s of the cells.
-    #TODO: Store borders as Table metadata and only apply them in `__str__()`.
     for r, row in enumerate(rows):
       r_pos = r
       c_pos = 0
@@ -149,7 +167,7 @@ class Table:
 
 class ListLike:
 
-  def __init__(self, item_type):
+  def __init__(self, item_type: type):
     self._items = []
     self.item_type = item_type
 
@@ -159,16 +177,19 @@ class ListLike:
     else:
       return self.item_type(item)
 
-  def __getitem__(self, index):
+  def __getitem__(self, index: int):
     return self._items[index]
 
-  def __setitem__(self, index, item):
+  def __setitem__(self, index: int, item):
     self._items[index] = self._cast(item)
+
+  def __delitem__(self, index: int):
+    del self._items[index]
 
   def __len__(self):
     return len(self._items)
 
-  def __add__(self, other):
+  def __add__(self, other: 'ListLike'):
     return self._items + other._items
 
   def __iter__(self):
@@ -181,7 +202,7 @@ class ListLike:
 
 class CellGroup(ListLike):
 
-  def __repr__(self):
+  def __repr__(self) -> str:
     class_name = type(self).__name__
     if self.header is None:
       header_str = ''
@@ -190,12 +211,13 @@ class CellGroup(ListLike):
     return f'{class_name}({self._items!r}{header_str})'
 
 
-class Rows(CellGroup):
+class Rows(CellGroup, Styled):
 
-  def __init__(self, raw_rows: RawRows=None, header=False):
+  def __init__(self, raw_rows: RawRows=None, header=False, **kwargs: Mapping[str,Any]):
     super().__init__(Row)
     self._items: List[Row]
     self.header = header
+    self.init_style(kwargs)
     if not raw_rows:
       raw_rows = cast(RawRows, [])
     elif isinstance(raw_rows[0], str) or not isinstance(raw_rows[0], collections.abc.Iterable):
@@ -205,33 +227,42 @@ class Rows(CellGroup):
     for raw_row in raw_rows:
       self.append(raw_row)
 
-  def __str__(self):
+  def __str__(self) -> str:
     html_lines = []
+    if self.header:
+      tag = 'thead'
+    else:
+      tag = 'tbody'
+    attr_str = self.style.to_attr_str()
+    html_lines.append(f'  <{tag}{attr_str}>')
     for row in self:
       copy = row.copy()
       if copy.header is None:
         copy.header = self.header
       html_lines.append(str(copy))
+    html_lines.append(f'  </{tag}>')
     return '\n'.join(html_lines)
 
 
-class Row(CellGroup):
+class Row(CellGroup, Styled):
 
-  def __init__(self, raw_row: RawRow=None, header=None):
+  def __init__(self, raw_row: RawRow=None, header=None, **kwargs: Mapping[str,Any]):
     super().__init__(Cell)
     self._items: List[Cell]
     self.header = header
+    self.init_style(kwargs)
     if not raw_row:
       raw_row = []
     for raw_cell in raw_row:
       self.append(raw_cell)
 
-  def copy(self):
+  def copy(self) -> 'Row':
     return type(self)(self, header=self.header)
 
-  def __str__(self):
+  def __str__(self) -> str:
     html_lines = []
-    html_lines.append('    <tr>')
+    attr_str = self.style.to_attr_str()
+    html_lines.append(f'    <tr{attr_str}>')
     for cell in self:
       if self.header != cell.header:
         final_cell = cell.copy()
@@ -243,104 +274,85 @@ class Row(CellGroup):
     return '\n'.join(html_lines)
 
 
-class Cell:
+class Cell(Styled):
 
-  METADATA = {
-    'header': {'default':False, 'type':bool},
-    'width':  {'default':1, 'type':int},
-    'height': {'default':1, 'type':int},
-    'align':  {'default':'left', 'type':str},
-    'font':   {'default':None, 'type':str},
-    'size':   {'default':None, 'type':str},
-    'bold':   {'default':False, 'type':bool},
-    'borders':{'default':set(), 'type':set, 'raw_type':Union[str,Sequence[str],Set[str]]},
-    'css':    {'default':{}, 'type':dict, 'raw_type':Union[str,Sequence[str],Mapping[str,Any]]},
-  }
+  ATTR_DEFAULTS = {'width':1, 'height':1, 'header':None}
 
   def __init__(self, raw_cell: Any=None, value: Any=None, **kwargs):
     if isinstance(raw_cell, type(self)):
       type(self).copy(raw_cell, self)
       return
-    self.init_attrs(**kwargs)
+    unused = self.init_all(kwargs)
     if isinstance(raw_cell, collections.abc.Mapping):
       self.value = raw_cell.get('value')
-      self.init_attrs(**raw_cell)
+      unused = self.init_all(raw_cell, ignore={'value'})
     elif raw_cell is None:
       self.value = value
     else:
       self.value = raw_cell
 
-  @property
-  def borders(self):
-    return self._borders
-  
-  @borders.setter
-  def borders(self, value):
-    if isinstance(value, str):
-      self._borders = set((value,))
-    elif isinstance(value, collections.abc.Iterable):
-      # A `set` is an iterable too.
-      self._borders = set(value)
-    elif value is None:
-      self._borders = set()
-    else:
-      raise ValueError(f"'borders' must be a `str` or sequence of `str`s. Saw: {value!r}")
+  def init_all(self, kwargs: Mapping[str,Any], ignore=None):
+    unused_attrs = self.init_attrs(kwargs)
+    unused_styles = self.init_style(kwargs)
+    unused = unused_attrs & unused_styles
+    if ignore is not None:
+      unused = unused - ignore
+    if unused:
+      class_name = type(self).__name__
+      unused_str = ', '.join([repr(attr) for attr in unused])
+      raise AttributeError(f'{class_name!r} object has no attribute(s) {unused_str}')
 
-  @property
-  def css(self):
-    return self._css
-
-  @css.setter
-  def css(self, value):
-    self._css = parse_css(value)
-
-  def init_attrs(self, **kwargs):
-    for attr, metadata in self.METADATA.items():
+  def init_attrs(self, kwargs: Mapping[str,Any]) -> Set[str]:
+    unused = set(kwargs.keys())
+    for attr, default in self.ATTR_DEFAULTS.items():
       if attr in kwargs:
-        raw_value = kwargs[attr]
+        setattr(self, attr, kwargs[attr])
+        unused.remove(attr)
       else:
-        raw_value = metadata['default']
-      # Don't know if this cast really accomplishes anything, but why not.
-      value = cast(metadata['type'], raw_value)
-      setattr(self, attr, value)
+        setattr(self, attr, default)
+    return unused
 
-  def apply(self, overwrite=True, **kwargs):
+  def apply(self, overwrite=True, **kwargs: Mapping[str,Any]):
     """Set several properties at once."""
     for key, value in kwargs.items():
       if key == 'css':
         for ckey, cvalue in value.items():
-          if overwrite or not self.css.get(ckey):
-            self.css[ckey] = cvalue
-      elif hasattr(self, key):
+          if overwrite or not self.style.css.get(ckey):
+            self.style.css[ckey] = cvalue
+      elif hasattr(self.style, key):
         if overwrite:
-          setattr(self, key, value)
-        elif getattr(self, key) is None:
-          setattr(self, key, value)
+          setattr(self.style, key, value)
+        elif getattr(self.style, key) is None:
+          setattr(self.style, key, value)
 
-  def copy(self, copy: 'Cell'=None):
+  def copy(self, copy: 'Cell'=None) -> 'Cell':
     if copy is None:
       copy = type(self)()
     if hasattr(self.value, 'copy'):
       copy.value = self.value.copy()
     else:
       copy.value = self.value
-    copy.init_attrs(**vars(self))
+    copy.style = self.style.copy()
+    copy.init_attrs(vars(self))
     return copy
 
-  def __repr__(self):
+  def __repr__(self) -> str:
     class_name = type(self).__name__
-    kwarg_pairs = []
+    kwarg_strs = []
     if self.value is not None:
-      kwarg_pairs.append(('value', repr(self.value)))
-    for attr, metadata in self.METADATA.items():
+      kwarg_strs.append(f'value={self.value!r}')
+    for attr, default in self.ATTR_DEFAULTS.items():
+      value = getattr(self, attr)
+      if value != default:
+        kwarg_strs.append(f'{attr}={value!r}')
+    for attr, metadata in Style.METADATA.items():
       value = getattr(self, attr)
       if value != metadata['default']:
-        kwarg_pairs.append((attr, repr(value)))
-    kwarg_strs = [f'{attr}={value}' for attr, value in kwarg_pairs]
+        kwarg_strs.append(f'{attr}={value!r}')
     kwarg_str = ', '.join(kwarg_strs)
     return f'{class_name}({kwarg_str})'
 
-  def __str__(self):
+  def __str__(self) -> str:
     attributes = []
     if self.header:
       tag = 'th'
@@ -351,7 +363,7 @@ class Cell:
       attributes.append(f'colspan={self.width}')
     if self.height != 1:
       attributes.append(f'rowspan={self.height}')
-    style_str = get_style_str(**vars(self))
+    style_str = str(self.style)
     if style_str:
       attributes.append(style_str)
     if attributes:
@@ -365,53 +377,116 @@ class Cell:
     return f'<{tag}{attributes_html}>{value}</{tag}>'
 
 
-def parse_css(value):
-  css = {}
-  if isinstance(value, str):
-    for statement in value.split(';'):
-      key, value = parse_css_statement(statement)
-      css[key] = value
-  elif isinstance(value, collections.abc.Mapping):
-    css = dict(value)
-  elif isinstance(value, collections.abc.Iterable):
-    for statement in value:
-      key, value = parse_css_statement(statement)
-      css[key] = value
-  elif value is not None:
-    raise ValueError(f"'css' must be a `str`, sequence of `str`, or a mapping. Saw: {value!r}")
-  return css
+class Style:
 
+  METADATA: Dict[str,Dict[str,Any]] = {
+    'align':  {'default':'left', 'type':str, 'css':'text-align'},
+    'font':   {'default':None, 'type':str, 'css':'font-family'},
+    'size':   {'default':None, 'type':str, 'css':'font-size'},
+    'bold':   {'default':False, 'type':bool},
+    'borders':{'default':set(), 'type':set, 'raw_type':Union[str,Sequence[str],Set[str]]},
+    'css':    {'default':{}, 'type':dict, 'raw_type':Union[str,Sequence[str],Mapping[str,Any]]},
+  }
 
-def parse_css_statement(statement):
-  try:
-    key, value = statement.split(':')
-  except ValueError as error:
-    error.args = (f'Invalid CSS statement: {statement!r}',)
-    raise error
-  return key.strip(), value.strip()
+  def __init__(self, **kwargs: Mapping[str,Any]):
+    super().__init__()
+    for key, metadata in self.METADATA.items():
+      if key in kwargs:
+        setattr(self, key, kwargs[key])
+        del kwargs[key]
+      else:
+        setattr(self, key, metadata['default'])
+    invalid_attrs = [repr(key) for key in kwargs]
+    if invalid_attrs:
+      class_name = type(self).__name__
+      raise AttributeError(f'Invalid attribute(s) for {class_name!r} object: '+', '.join(invalid_attrs))
 
+  def __setattr__(self, attr: str, raw_value: Any):
+    if attr not in self.METADATA:
+      raise AttributeError(f'{type(self).__name__!r} object has no attribute {attr!r}.')
+    if attr == 'css':
+      value = Style.parse_css(raw_value)
+    elif attr == 'borders':
+      value = Style.parse_borders(raw_value)
+    else:
+      value = raw_value
+    object.__setattr__(self, attr, value)
 
-def get_style_str(
-    font: str=None, size: str=None, align: str=None, bold: bool=None, borders: Set[str]=None,
-    css: Mapping[str,Any]=None, **kwargs
-  ) -> str:
-  if css is None:
+  def copy(self):
+    return type(self)(**vars(self))
+
+  @staticmethod
+  def parse_borders(value: Union[str,Iterable,None]) -> Set[str]:
+    borders = set()
+    if isinstance(value, str):
+      borders.add(value)
+    elif isinstance(value, collections.abc.Iterable):
+      # A `set` is an iterable too.
+      borders = set(value)
+    elif value is not None:
+      raise ValueError(f"'borders' must be a `str` or sequence of `str`s. Saw: {value!r}")
+    return borders
+
+  @staticmethod
+  def parse_css(value: Union[str,Mapping,Iterable,None]) -> Dict[str,Any]:
     css = {}
-  else:
-    css = dict(css)
-  if font:
-    css['font-family'] = font
-  if size:
-    css['font-size'] = size
-  if align:
-    css['text-align'] = align
-  if bold:
-    css['font-weight'] = 'bold'
-  if borders:
-    for border in borders:
-      css[f'border-{border}'] = BORDER_STYLE
-  if css:
-    css_statements = [f'{key}: {value}' for key, value in css.items()]
-    return 'style="{}"'.format('; '.join(css_statements))
-  else:
-    return ''
+    if isinstance(value, str):
+      for statement in value.split(';'):
+        key, value = Style.parse_css_statement(statement)
+        css[key] = value
+    elif isinstance(value, collections.abc.Mapping):
+      css = dict(value)
+    elif isinstance(value, collections.abc.Iterable):
+      for statement in value:
+        key, value = Style.parse_css_statement(statement)
+        css[key] = value
+    elif value is not None:
+      raise ValueError(f"'css' must be a `str`, sequence of `str`, or a mapping. Saw: {value!r}")
+    return css
+
+  @staticmethod
+  def parse_css_statement(statement: str) -> Tuple[str,str]:
+    try:
+      key, value = statement.split(':')
+    except ValueError as error:
+      error.args = (f'Invalid CSS statement: {statement!r}',)
+      raise error
+    return key.strip(), value.strip()
+
+  def __repr__(self) -> str:
+    attr_strs = []
+    for key, metadata in self.METADATA.items():
+      value = getattr(self, key)
+      if value != metadata['default']:
+        attr_strs.append(f'{key}={value!r}')
+    class_name = type(self).__name__
+    return f'{class_name}({", ".join(attr_strs)})'
+
+  def __str__(self) -> str:
+    css = dict(self.css)
+    for key, metadata in self.METADATA.items():
+      if not hasattr(self, key) or key == 'css':
+        continue
+      value = getattr(self, key)
+      if value is None:
+        continue
+      if 'css' in metadata:
+        css_property = metadata['css']
+        css[css_property] = value
+      elif key == 'bold' and value:
+        css['font-weight'] = 'bold'
+      elif key == 'borders':
+        for border in value:
+          css[f'border-{border}'] = BORDER_STYLE
+    if css:
+      css_statements = [f'{key}: {value}' for key, value in css.items()]
+      return 'style="{}"'.format('; '.join(css_statements))
+    else:
+      return ''
+
+  def to_attr_str(self) -> str:
+    style_str = str(self)
+    if style_str:
+      return ' '+style_str
+    else:
+      return ''
