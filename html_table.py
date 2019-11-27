@@ -159,10 +159,7 @@ class Table(Styled):
             cell.borders.add('left')
           else:
             cell.css['border-left'] = style
-        if isinstance(cell, dict):
-          c_pos += cell.get('width', 1) or 1
-        else:
-          c_pos += 1
+        c_pos += cell.width
 
 
 class ListLike:
