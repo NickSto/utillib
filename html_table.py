@@ -99,6 +99,28 @@ class Table(Styled):
   def rows(self) -> 'Rows':
     return self.header + self.body
 
+  @property
+  def width(self) -> Optional[int]:
+    #TODO: This is not always accurate, even with a table that appears to have equal width rows.
+    #      In such a table, if a cell has a rowspan > 1, the following row will have a smaller
+    #      total colspan, since the cell in the row above takes the place of one of its cells.
+    try:
+      row = self[0]
+    except IndexError:
+      return None
+    width = 0
+    for cell in row:
+      width += cell.width
+    return width
+
+  @property
+  def height(self):
+    #TODO: I think this is not always accurate, if you have the wrong combination of rowspans.
+    return len(self)
+
+  def __len__(self) -> int:
+    return len(self.header) + len(self.body)
+
   def __iter__(self) -> Generator['Row',None,None]:
     for row in self.rows:
       yield row
@@ -120,6 +142,25 @@ class Table(Styled):
       html_lines.append(str(self.body))
     html_lines.append('</table>')
     return '\n'.join(html_lines)
+
+  def extend(self, other, direction='down'):
+    #TODO: Keep header rows looking like headers and body rows looking like bodies.
+    if direction == 'down':
+      self.body += other.rows
+    elif direction == 'right':
+      max_len = max(len(self), len(other))
+      orig_width = self.width
+      for i in range(max_len):
+        try:
+          row = self[i]
+        except IndexError:
+          row = Row([None] * orig_width)
+          self.body.append(row)
+        try:
+          other_row = other[i]
+        except IndexError:
+          other_row = Row([None] * other.width)
+        row.extend(other_row)
 
   def render(self) -> HTML:
     return HTML(str(self))
@@ -186,8 +227,13 @@ class ListLike:
   def __len__(self):
     return len(self._items)
 
-  def __add__(self, other: 'ListLike'):
-    return self._items + other._items
+  def __add__(self, other: 'ListLike') -> 'ListLike':
+    if hasattr(self, 'copy') and hasattr(self.copy, '__call__'):
+      copy = self.copy()
+      copy._items += other._items
+      return copy
+    else:
+      return type(self)(self._items + other._items)
 
   def __iter__(self):
     for item in self._items:
@@ -196,8 +242,26 @@ class ListLike:
   def append(self, item):
     self._items.append(self._cast(item))
 
+  def insert(self, index: int, item):
+    self._items.insert(index, self._cast(item))
+
+  def extend(self, items):
+    if type(items) == type(self):
+      self._items.extend(items._items)
+    elif type(items[0]) == self.item_type:
+      self._items.extend([self._cast(item) for item in items])
+    else:
+      self_type = type(self).__name__
+      raise ValueError(
+        f'Argument to {self_type}.extend() must be either a {self_type} or a sequence of '
+        f'{self.item_type.__name__}s.'
+      )
+
 
 class CellGroup(ListLike):
+
+  def copy(self):
+    return type(self)(self, header=self.header)
 
   def __repr__(self) -> str:
     class_name = type(self).__name__
@@ -252,9 +316,6 @@ class Row(CellGroup, Styled):
       raw_row = []
     for raw_cell in raw_row:
       self.append(raw_cell)
-
-  def copy(self) -> 'Row':
-    return type(self)(self, header=self.header)
 
   def __str__(self) -> str:
     html_lines = []
