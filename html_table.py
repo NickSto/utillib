@@ -30,7 +30,7 @@ class Styled:
     if attr in Style.METADATA:
       return getattr(self.style, attr)
     else:
-      object.__getattr__(self, attr)
+      object.__getattribute__(self, attr)
 
   def __setattr__(self, attr: str, value: Any):
     if attr == 'style':
