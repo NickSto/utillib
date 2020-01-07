@@ -380,6 +380,8 @@ class Cell(Styled):
       self.value = value
     else:
       self.value = raw_cell
+    if not kwargs.get('align') and is_number(self.value):
+      self.style.align = 'right'
 
   def init_all(self, kwargs: Mapping[str,Any], ignore=None):
     unused_attrs = self.init_attrs(kwargs)
@@ -479,7 +481,7 @@ class Style:
     'align':  {'default':'left', 'type':str, 'css':'text-align'},
     'font':   {'default':None, 'type':str, 'css':'font-family'},
     'size':   {'default':None, 'type':str, 'css':'font-size'},
-    'bold':   {'default':False, 'type':bool},
+    'bold':   {'default':None, 'type':bool},
     'borders':{'default':set(), 'type':set, 'raw_type':Union[str,Sequence[str],Set[str]]},
     'css':    {'default':{}, 'type':dict, 'raw_type':Union[str,Sequence[str],Mapping[str,Any]]},
   }
@@ -569,8 +571,11 @@ class Style:
       if 'css' in metadata:
         css_property = metadata['css']
         css[css_property] = value
-      elif key == 'bold' and value:
-        css['font-weight'] = 'bold'
+      elif key == 'bold':
+        if value is True:
+          css['font-weight'] = 'bold'
+        elif value is False:
+          css['font-weight'] = 'normal'
       elif key == 'borders':
         for border in value:
           css[f'border-{border}'] = BORDER_STYLE
@@ -586,3 +591,12 @@ class Style:
       return ' '+style_str
     else:
       return ''
+
+
+def is_number(value: Any) -> bool:
+  try:
+    float(value)
+  except (ValueError, TypeError):
+    return False
+  else:
+    return True
