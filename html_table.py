@@ -163,6 +163,11 @@ class Table(Styled):
     html_lines.append(indent*indents+'</table>')
     return '\n'.join(html_lines)
 
+  def deep_apply(self, **kwargs: Mapping[str,Any]) -> None:
+    """Apply styles directly to every Cell."""
+    self.header.deep_apply(**kwargs)
+    self.body.deep_apply(**kwargs)
+
   def extend(self, other, direction='down'):
     #TODO: Keep header rows looking like headers and body rows looking like bodies.
     if direction == 'down':
@@ -330,6 +335,11 @@ class Rows(CellGroup, Styled):
     html_lines.append(indent*indents+f'</{tag}>')
     return '\n'.join(html_lines)
 
+  def deep_apply(self, **kwargs: Mapping[str,Any]) -> None:
+    """Apply styles directly to every Cell."""
+    for row in self:
+      row.deep_apply(**kwargs)
+
 
 class Row(CellGroup, Styled):
 
@@ -362,6 +372,11 @@ class Row(CellGroup, Styled):
       html_lines.append(indent*(indents+1)+final_cell.to_html())
     html_lines.append(indent*indents+'</tr>')
     return '\n'.join(html_lines)
+
+  def deep_apply(self, **kwargs: Mapping[str,Any]) -> None:
+    """Apply styles directly to every Cell."""
+    for cell in self:
+      cell.apply(**kwargs)
 
 
 class Cell(Styled):
