@@ -132,15 +132,35 @@ class Table(Styled):
       bindex = index - len(self.header)
       return self.body[bindex]
 
-  def __str__(self) -> str:
+  def __repr__(self) -> str:
+    class_name = type(self).__name__
+    arg_strs: List[str] = []
+    if self.body:
+      arg_strs.append(repr(self.body))
+    if self.header:
+      arg_strs.append(f'header={self.header!r}')
+    for attr, metadata in Style.METADATA.items():
+      value = getattr(self, attr)
+      if value != metadata['default']:
+        arg_strs.append(f'{attr}={value!r}')
+    return f'{class_name}('+', '.join(arg_strs)+')'
+
+  def to_text(self, delim='\t', row_delim='\n') -> str:
+    sections = []
+    for section in self.header, self.body:
+      if section:
+        sections.append(section.to_text(delim=delim, row_delim=row_delim))
+    return row_delim.join(sections)
+
+  def to_html(self, indents=0, indent='  ') -> str:
     html_lines = []
     attr_str = self.style.to_attr_str()
-    html_lines.append(f'<table{attr_str}>')
+    html_lines.append(indent*indents+f'<table{attr_str}>')
     if self.header:
-      html_lines.append(str(self.header))
+      html_lines.append(self.header.to_html(indents=(indents+1), indent=indent))
     if self.body:
-      html_lines.append(str(self.body))
-    html_lines.append('</table>')
+      html_lines.append(self.body.to_html(indents=(indents+1), indent=indent))
+    html_lines.append(indent*indents+'</table>')
     return '\n'.join(html_lines)
 
   def extend(self, other, direction='down'):
@@ -163,7 +183,7 @@ class Table(Styled):
         row.extend(other_row)
 
   def render(self) -> HTML:
-    return HTML(str(self))
+    return HTML(self.to_html())
 
   def add_border(self, dim: str, position: int, section: str=None, style=BORDER_STYLE) -> None:
     """Add a border to a table.
@@ -289,19 +309,25 @@ class Rows(CellGroup, Styled):
       self.append(raw_row)
 
   def __str__(self) -> str:
+    return '['+', '.join([str(row) for row in self])+']'
+
+  def to_text(self, delim='\t', row_delim='\n') -> str:
+    return row_delim.join([row.to_text(delim=delim) for row in self])
+
+  def to_html(self, indents=0, indent='  ') -> str:
     html_lines = []
     if self.header:
       tag = 'thead'
     else:
       tag = 'tbody'
     attr_str = self.style.to_attr_str()
-    html_lines.append(f'  <{tag}{attr_str}>')
+    html_lines.append(indent*indents+f'<{tag}{attr_str}>')
     for row in self:
       copy = row.copy()
       if copy.header is None:
         copy.header = self.header
-      html_lines.append(str(copy))
-    html_lines.append(f'  </{tag}>')
+      html_lines.append(copy.to_html(indents=(indents+1), indent=indent))
+    html_lines.append(indent*indents+f'</{tag}>')
     return '\n'.join(html_lines)
 
 
@@ -318,17 +344,23 @@ class Row(CellGroup, Styled):
       self.append(raw_cell)
 
   def __str__(self) -> str:
+    return '('+self.to_text(delim=', ')+')'
+
+  def to_text(self, delim='\t') -> str:
+    return delim.join([str(cell) for cell in self])
+
+  def to_html(self, indents=0, indent='  ') -> str:
     html_lines = []
     attr_str = self.style.to_attr_str()
-    html_lines.append(f'    <tr{attr_str}>')
+    html_lines.append(indent*indents+f'<tr{attr_str}>')
     for cell in self:
       if self.header != cell.header:
         final_cell = cell.copy()
         final_cell.header = self.header
       else:
         final_cell = cell
-      html_lines.append('      '+str(final_cell))
-    html_lines.append('    </tr>')
+      html_lines.append(indent*(indents+1)+final_cell.to_html())
+    html_lines.append(indent*indents+'</tr>')
     return '\n'.join(html_lines)
 
 
@@ -411,6 +443,12 @@ class Cell(Styled):
     return f'{class_name}({kwarg_str})'
 
   def __str__(self) -> str:
+    if self.value is None:
+      return ''
+    else:
+      return str(self.value)
+
+  def to_html(self) -> str:
     attributes = []
     if self.header:
       tag = 'th'
