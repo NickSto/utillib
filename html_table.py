@@ -79,11 +79,11 @@ class Table(Styled):
     if header_style is None:
       header_style = DEFAULT_HEADER_STYLE.copy()
     if header is None and header_len is not None and body is not None:
-      self.header = Rows(body[:header_len], header=True)
-      self.body = Rows(body[header_len:])
+      self.header = body[:header_len]
+      self.body = body[header_len:]
     else:
-      self.header = Rows(header, header=True)
-      self.body = Rows(body)
+      self.header = header
+      self.body = body
     self.header.style = header_style
     self.init_style(kwargs)
 
@@ -94,6 +94,22 @@ class Table(Styled):
   @header_style.setter
   def header_style(self, raw_style: RawStyle):
     self.header.style = raw_style
+
+  @property
+  def header(self) -> Rows:
+    return self._header
+
+  @header.setter
+  def header(self, raw_header: RawRows) -> None:
+    self._header = Rows(raw_header, header=True)
+
+  @property
+  def body(self) -> Rows:
+    return self._body
+
+  @body.setter
+  def body(self, raw_body: RawRows) -> None:
+    self._body = Rows(raw_body)
 
   @property
   def rows(self) -> 'Rows':
