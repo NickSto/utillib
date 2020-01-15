@@ -96,7 +96,7 @@ class Table(Styled):
     self.header.style = raw_style
 
   @property
-  def header(self) -> Rows:
+  def header(self) -> 'Rows':
     return self._header
 
   @header.setter
@@ -104,7 +104,7 @@ class Table(Styled):
     self._header = Rows(raw_header, header=True)
 
   @property
-  def body(self) -> Rows:
+  def body(self) -> 'Rows':
     return self._body
 
   @body.setter
@@ -458,6 +458,9 @@ class Cell(Styled):
     copy.style = self.style.copy()
     copy.init_attrs(vars(self))
     return copy
+
+  #TODO:
+  # def __eq__(self, other) -> bool:
 
   def __repr__(self) -> str:
     class_name = type(self).__name__
