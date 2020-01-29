@@ -1,3 +1,4 @@
+# Currently Python 2.7 and Python 3 compatible.
 import os
 __version__ = '1.0'
 

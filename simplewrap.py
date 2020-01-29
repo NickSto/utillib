@@ -1,6 +1,5 @@
-#!/usr/bin/env python
-"""A wrapper for textwrap, to simplify its usage and add an important
-capability."""
+"""A wrapper for textwrap, to simplify its usage and add an important capability."""
+# This should currently be compatible with Python 2.7 and 3.
 import textwrap
 try:
   import console
