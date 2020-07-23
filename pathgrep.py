@@ -28,7 +28,7 @@ def make_argparser():
       "characters: '"+"', '".join(ESCAPE_CHARS.keys())+"'. Default: whitespace")
   filters = parser.add_argument_group('Filtering')
   filters.add_argument('-i', '--include', nargs=3, action='append',
-    metavar=('[absolute|relative]', '[recursive|exact]', 'path'),
+    metavar=('[absolute|relative|startswith]', '[recursive|exact]', 'path'),
     help='Include lines matching this path. If inclusion rules are given, this uses a default-'
       'exclude model where only lines matching an include rule are output. If only exclude rules '
       'are given, it includes every line unless it matches an exclude rule. If both include and '
@@ -36,7 +36,7 @@ def make_argparser():
       'include and exclude rule, exclusion takes precedence. '
       'If no rules are given, it will not include any line.')
   filters.add_argument('-x', '--exclude', nargs=3, action='append',
-    metavar=('[absolute|relative]', '[recursive|exact]', 'path'),
+    metavar=('[absolute|relative|startswith]', '[recursive|exact]', 'path'),
     help='Exclude lines matching this path.')
   filters.add_argument('-e', '--ext', nargs=2, action='append', metavar=('[include|exclude]', 'ext'),
     help='Include or exclude lines with paths matching this extension.')
@@ -96,14 +96,18 @@ def parse_rule_args(filters, args, rule_type):
   if args is None:
     return
   for path_type, recursivity, path_str in args:
-    if path_type not in ('absolute', 'relative'):
-      raise ValueError(f"1st argument to --{rule_type} must be 'absolute' or 'relative'. "
-                       f'Saw {path_type!r} instead.')
+    if path_type not in ('absolute', 'relative', 'startswith'):
+      raise ValueError(
+        f"1st argument to --{rule_type} must be 'absolute', 'relative', or 'startswith'. "
+        f'Saw {path_type!r} instead.'
+      )
     if recursivity not in ('recursive', 'exact'):
-      raise ValueError(f"2nd argument to --{rule_type} must be 'recursive' or 'exact'. "
-                       f'Saw {recursivity!r} instead.')
+      raise ValueError(
+        f"2nd argument to --{rule_type} must be 'recursive' or 'exact'. "
+        f'Saw {recursivity!r} instead.'
+      )
     filters[rule_type+'d'][path_type][recursivity].append(pathlib.Path(path_str))
-    filters['has_{}d'.format(rule_type)] = True
+    filters[f'has_{rule_type}d'] = True
 
 
 def parse_ext_rule(filters, ext_args):
@@ -168,13 +172,16 @@ def make_blank_criteria():
       'recursive': [],
       'exact': [],
     },
+    'startswith': {
+      'recursive': [],
+      'exact': [],
+    },
     'ext': [],
   }
 
 
 def parse_filters_file(filters_file):
   assert yaml is not None, 'yaml module required to parse filters file.'
-  filters = {}
   filters_data = yaml.safe_load(filters_file)
   excluded, has_excluded = parse_criteria(filters_data.get('excluded', {}))
   included, has_included = parse_criteria(filters_data.get('included', {}))
@@ -188,11 +195,14 @@ def parse_criteria_file(criteria_file):
   assert yaml is not None, 'yaml module required to parse included/excluded files.'
   criteria_data = yaml.safe_load(criteria_file)
   root_keys = make_blank_criteria().keys()
-  assert any([key in criteria_data for key in root_keys]), (
-    'Included/excluded yaml file contains none of the recognized top-level keys. At least one of '
-    "{} must be present. Saw instead: {}."
-    .format(', '.join([repr(key) for key in root_keys]),
-            ', '.join([repr(key) for key in criteria_data.keys()])))
+  if not any([key in criteria_data for key in root_keys]):
+    raise AssertionError(
+      'Included/excluded yaml file contains none of the recognized top-level keys. At least one of '
+      "{} must be present. Saw instead: {}.".format(
+        ', '.join([repr(key) for key in root_keys]),
+        ', '.join([repr(key) for key in criteria_data.keys()])
+      )
+    )
   return parse_criteria(criteria_data)
 
 
@@ -218,6 +228,16 @@ def parse_criteria(criteria_data):
   #   exact
   for path_str in relative.get('exact', ()):
     criteria['relative']['exact'].append(pathlib.Path(path_str))
+    has_criteria = True
+  # startswith
+  startswith = criteria_data.get('startswith', {})
+  #   recursive
+  for path_str in startswith.get('recursive', ()):
+    criteria['startswith']['recursive'].append(pathlib.Path(path_str))
+    has_criteria = True
+  #   exact
+  for path_str in startswith.get('exact', ()):
+    criteria['startswith']['exact'].append(pathlib.Path(path_str))
     has_criteria = True
   # ext
   for ext in criteria_data.get('ext', ()):
@@ -280,7 +300,19 @@ def path_matches_criteria(path, criteria):
   for query_path in criteria['relative']['recursive']:
     if is_subpath(path, query_path):
       return True
-  #   ext
+  # startswith
+  #   exact
+  for query_path in criteria['startswith']['exact']:
+    if query_path == path:
+      return True
+  #   recursive
+  for query_path in criteria['startswith']['recursive']:
+    try:
+      path.relative_to(query_path)
+      return True
+    except ValueError:
+      pass
+  # ext
   for ext in criteria['ext']:
     if matches_extensions(path, ext):
       return True
