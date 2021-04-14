@@ -65,8 +65,9 @@ class Table(Styled):
     `borders`: Which sides of the cell to put a border on. The sides are named 'left', 'right',
                'top', and 'bottom'. Give a single `str`, or a `tuple`/`list` of sides.
                This will use a standard border style of `{}`.
-    `css`:     Arbitrary CSS to insert in the `style` attribute. Give a `str` of raw CSS or a
-               `tuple`/`list` of CSS statements.
+    `css`:     Arbitrary CSS to insert in the `style` attribute. Give a `dict` mapping properties to
+               values or an iterable of CSS statements (e.g. `padding: 1px`) or a `str` (a single
+               CSS statement).
     The kwargs to this function that appear in the list above will be applied to the entire table.
     `header_style` is a dict you can fill with the metadata listed above, and it will be applied to
     every cell in the header row(s). Default: {!r}. The metadata will not overwrite any existing
@@ -625,6 +626,19 @@ class Style:
       return ' '+style_str
     else:
       return ''
+
+
+def rotate_table(old_rows):
+  """Rotate a table 90° (rows become columns, columns become rows).
+  Only works on tables where all cells' widths and heights are 1 and all rows are the same width."""
+  new_rows = []
+  width = len(old_rows[0])
+  for col in range(width):
+    new_row = []
+    for old_row in old_rows:
+      new_row.append(old_row[col])
+    new_rows.append(new_row)
+  return new_rows
 
 
 def is_number(value: Any) -> bool:
