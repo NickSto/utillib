@@ -182,7 +182,7 @@ class Style(dict):
       self.selectors = [selector]
     for prop, value in kwargs.items():
       self[prop] = value
-    for prop. value in styles.items():
+    for prop, value in styles.items():
       self[prop] = value
   @property
   def selector(self):
