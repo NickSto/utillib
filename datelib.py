@@ -131,6 +131,10 @@ def floor_datetime(dt, time_unit):
     unit_value = getattr(dt, this_unit.name)
     if time_unit == WEEK and this_unit == DAY:
       unit_value = unit_value - (unit_value % 7)
+      # `datetime.day` must be >= 1.
+      #TODO: Double-check this gives the correct result.
+      if unit_value < 1:
+        unit_value = 1
     elif this_unit.seconds < time_unit.seconds:
       unit_value = this_unit.min_value
     dt_dict[this_unit.name] = unit_value
