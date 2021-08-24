@@ -54,6 +54,9 @@ def make_argparser():
     help='Just print the value of this key from the metadata.')
   options.add_argument('-t', '--trim', action='store_true',
     help='Trim whitespace one either side of the output.')
+  options.add_argument('-V', '--validate', action='store_true',
+    help='Only validate yaml syntax.')
+  options.add_argument('-q', '--quiet', dest='verbose', action='store_false', default=True)
   options.add_argument('-h', '--help', action='help',
     help='Print this argument help text and exit.')
   return parser
@@ -64,18 +67,21 @@ def main(argv):
   args = parser.parse_args(argv[1:])
 
   with args.input.open() as infile:
-    if args.key:
+    if args.key or args.validate:
       metadata, content = parse(infile, parse_yaml=True)
     else:
       metadata, content = parse(infile, parse_yaml=False)
 
+  if args.validate:
+    return
+
   if args.key:
     if metadata is None:
-      fail('No metadata found.')
+      fail('No metadata found.', args.verbose)
     try:
       output = metadata[args.key]
     except KeyError:
-      fail(f'No key {args.key!r} found in the metadata.')
+      fail(f'No key {args.key!r} found in the metadata.', args.verbose)
     if output is None:
       output = ''
     else:
@@ -85,7 +91,7 @@ def main(argv):
   elif args.content:
     output = content
   else:
-    fail('Must choose either --meta, --content, or --key.')
+    fail('Must choose either --meta, --content, or --key.', args.verbose)
 
   if args.trim:
     output = output.strip()
@@ -95,8 +101,9 @@ def main(argv):
   print(output, end='')
 
 
-def fail(message):
-  print(f'Error: {message}', file=sys.stderr)
+def fail(message, print_msg=True):
+  if print_msg:
+    print(f'Error: {message}', file=sys.stderr)
   if __name__ == '__main__':
     sys.exit(1)
   else:
