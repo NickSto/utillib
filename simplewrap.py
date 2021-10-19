@@ -5,7 +5,7 @@ try:
   import console
 except ImportError:
   from . import console
-__version__ = '0.9'
+__version__ = '0.10'
 
 DEFAULT_WIDTH = 70
 
@@ -74,7 +74,13 @@ class Wrapper(object):
     # do wrapping
     wrapped = []
     for line in text.splitlines():
-      wrapped.extend(self._textwrapper.wrap(line))
+      wrapped_lines = self._textwrapper.wrap(line)
+      if wrapped_lines:
+        wrapped.extend(wrapped_lines)
+      else:
+        # textwrap returns an empty list when given an empty string.
+        # But we don't want to remove empty lines.
+        wrapped.append('')
     wrapped_str = '\n'.join(wrapped)
     # restore permanent attributes
     if width is not None or width_mod is not None:
