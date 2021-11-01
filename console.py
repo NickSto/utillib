@@ -1,6 +1,13 @@
 # Currently Python 2.7 and Python 3 compatible.
+import ctypes
+import curses
+import io
+import platform
 import os
-__version__ = '1.0'
+import struct
+import subprocess
+import sys
+__version__ = '1.0.1'
 
 DEFAULT_WIDTH = 70
 DEFAULT_HEIGHT = 24
@@ -26,7 +33,6 @@ def termsize(default_height=None, default_width=None):
   DEFAULTs:         Module defaults (DEFAULT_WIDTH, DEFAULT_HEIGHT).
   """
   # Use Unix methods by default, unless the platform is definitely Windows.
-  import platform
   family = platform.system()
   if family.lower() == 'windows':
     methods = (termsize_win, termsize_stty, termsize_env)
@@ -46,8 +52,13 @@ def termsize(default_height=None, default_width=None):
 # Adapted from:
 # https://stackoverflow.com/questions/566746/how-to-get-console-window-width-in-python/566752#566752
 def termsize_ioctl():
-  import sys
-  for fd in (sys.stdin.fileno(), sys.stdout.fileno(), sys.stderr.fileno()):
+  for stream in sys.stdin, sys.stdout, sys.stderr:
+    try:
+      fd = stream.fileno()
+    except io.UnsupportedOperation:
+      # Strange environments like IPython can replace these I/O streams with custom objects which
+      # don't support `fileno()`.
+      continue
     (height, width) = _ioctl_fd(fd)
     if isinstance(height, int) and isinstance(width, int):
       return (height, width)
@@ -63,7 +74,6 @@ def termsize_ioctl():
 
 
 def _ioctl_fd(fd):
-  import struct
   try:
     import fcntl
     import termios
@@ -80,7 +90,6 @@ def termsize_stty():
   """Get current terminal height and width, using stty command.
   Returns a tuple of (height, width) int's, or (None, None) on error.
   Requires Python 2.7."""
-  import subprocess
   devnull = open(os.devnull, 'wb')
   try:
     output = subprocess.check_output(['stty', 'size'], stderr=devnull)
@@ -113,9 +122,6 @@ def termsize_env():
 
 # from: https://code.activestate.com/recipes/440694-determine-size-of-console-window-on-windows/
 def termsize_win():
-  import ctypes
-  import struct
-
   try:
     h = ctypes.windll.kernel32.GetStdHandle(-12)
     csbi = ctypes.create_string_buffer(22)
@@ -124,7 +130,6 @@ def termsize_win():
     return (None, None)
   if not res:
     return (None, None)
-
   (a, b, c, d, e, left, top, right, bottom, j, k) = struct.unpack("hhhhHhhhhhh", csbi.raw)
   try:
     height = bottom - top + 1
@@ -136,7 +141,6 @@ def termsize_win():
 
 #TODO: Use by default? Look into whether it works everywhere and better than all other methods.
 def termsize_curses():
-  import curses
   stdscr = curses.initscr()
   (height, width) = stdscr.getmaxyx()
   curses.endwin()
