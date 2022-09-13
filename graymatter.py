@@ -6,7 +6,7 @@ import pathlib
 import sys
 import yaml
 
-
+# Looks like https://pypi.org/project/frontmatter/ can already do this?
 def parse(lines, parse_yaml=True):
   content_lines = []
   yaml_lines = []
@@ -135,6 +135,8 @@ def main(argv):
         continue
       output = format_output(data, args.trim)
       if args.list_filename:
+        if output == '':
+          output = '\n'
         output = f'{md_path}\t{output}'
       print(output, end='')
     elif not args.validate:
