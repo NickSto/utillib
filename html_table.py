@@ -247,62 +247,62 @@ class Table(Styled):
 
   @classmethod
   def make_freq_table(cls, freqs, labels=None, headers=None, max_rows=None, ranks=True):
-      """Create a Table from a dict mapping values to counts of how often each value occurs.
-      This automatically sorts them by frequency, calculates the total and the percent of it each
-      count represents, and formats everything for readability.
-      `labels`: A dict mapping the raw keys in `freqs` to the display names which should be shown in
-          the table.
-      `headers`: Alternate text to show in the header row of the table. Give a dict mapping the
-          column number to the string to display. The "rank"s column is 0, the "values" column is 1,
-          and so on. This indexing is the same ("values" is still 1) if the ranks column is omitted.
-      `max_rows`: Only show the top `max_rows` values.
-      `ranks`: Whether to show the "ranks" column (True) or not (False).
-      """
-      if labels is None:
-          labels = {}
-      if headers is None:
-          headers = {}
-      for i, default_header in enumerate(('', 'Value', 'Count', 'Percent')):
-          if i not in headers:
-              headers[i] = default_header
-      all_items = sorted(freqs.items(), key=lambda item: (-item[1], item[0]))
-      total = sum([row[1] for row in all_items])
-      if max_rows is not None and len(all_items) > max_rows:
-          items = all_items[:max_rows]
-          trunc = True
+    """Create a Table from a dict mapping values to counts of how often each value occurs.
+    This automatically sorts them by frequency, calculates the total and the percent of it each
+    count represents, and formats everything for readability.
+    `labels`: A dict mapping the raw keys in `freqs` to the display names which should be shown in
+      the table.
+    `headers`: Alternate text to show in the header row of the table. Give a dict mapping the
+      column number to the string to display. The "rank"s column is 0, the "values" column is 1,
+      and so on. This indexing is the same ("values" is still 1) if the ranks column is omitted.
+    `max_rows`: Only show the top `max_rows` values.
+    `ranks`: Whether to show the "ranks" column (True) or not (False).
+    """
+    if labels is None:
+      labels = {}
+    if headers is None:
+      headers = {}
+    for i, default_header in enumerate(('', 'Value', 'Count', 'Percent')):
+      if i not in headers:
+        headers[i] = default_header
+    all_items = sorted(freqs.items(), key=lambda item: (-item[1], item[0]))
+    total = sum([row[1] for row in all_items])
+    if max_rows is not None and len(all_items) > max_rows:
+      items = all_items[:max_rows]
+      trunc = True
+    else:
+      items = all_items
+      trunc = False
+    max_round_to = 0
+    for value, count in items:
+      max_round_to = max(max_round_to, get_round_to(100*count/total, 1))
+    format_str = f'{{:0.{max_round_to}f}} %'
+    rows = []
+    for row_num, (value, count) in enumerate(items, 1):
+      pct = 100*count/total
+      if int(pct) == pct:
+        pct_str = str(int(pct))
+        align = 'left'
       else:
-          items = all_items
-          trunc = False
-      max_round_to = 0
-      for value, count in items:
-          max_round_to = max(max_round_to, get_round_to(100*count/total, 1))
-      format_str = f'{{:0.{max_round_to}f}} %'
-      rows = []
-      for row_num, (value, count) in enumerate(items, 1):
-          pct = 100*count/total
-          if int(pct) == pct:
-              pct_str = str(int(pct))
-              align = 'left'
-          else:
-              pct_str = format_str.format(pct)
-              align = 'right'
-          label = labels.get(value, value)
-          row = [label, {'value':f'{count:,}', 'align':'right'}, {'value':pct_str, 'align':align}]
-          if ranks:
-              row = [row_num] + row
-          rows.append(row)
-      if trunc:
-          rows.append([{'value':'...', 'width':3, 'align':'center'}])
-      summary = ['(Total)', {'value':f'{total:,}', 'align':'right'}, format_str.format(100)]
+        pct_str = format_str.format(pct)
+        align = 'right'
+      label = labels.get(value, value)
+      row = [label, {'value':f'{count:,}', 'align':'right'}, {'value':pct_str, 'align':align}]
       if ranks:
-          summary = [''] + summary
-      rows.append(summary)
-      header = [
-          headers[1], {'value':headers[2], 'align':'right'}, {'value':headers[3], 'align':'right'}
-      ]
-      if ranks:
-          header = [headers[0]] + header
-      return cls(rows, header=header)
+        row = [row_num] + row
+      rows.append(row)
+    if trunc:
+      rows.append([{'value':'...', 'width':3, 'align':'center'}])
+    summary = ['(Total)', {'value':f'{total:,}', 'align':'right'}, format_str.format(100)]
+    if ranks:
+      summary = [''] + summary
+    rows.append(summary)
+    header = [
+      headers[1], {'value':headers[2], 'align':'right'}, {'value':headers[3], 'align':'right'}
+    ]
+    if ranks:
+      header = [headers[0]] + header
+    return cls(rows, header=header)
 
 
 class ListLike:
