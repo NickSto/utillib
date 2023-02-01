@@ -1,6 +1,6 @@
 import collections.abc
 import math
-from typing import Any, Union, Optional, Sequence, Mapping, Generator, Iterable, Dict, List, Tuple, Set, cast
+from typing import Any, Union, Optional, Callable, Sequence, Mapping, Generator, Iterable, Dict, List, Tuple, Set, cast
 try:
   from IPython.display import HTML
 except ImportError:
@@ -246,7 +246,15 @@ class Table(Styled):
         c_pos += cell.width
 
   @classmethod
-  def make_freq_table(cls, freqs, labels=None, headers=None, max_rows=None, ranks=True):
+  def make_freq_table(
+      cls,
+      freqs: Mapping[Any,int],
+      labels: Optional[Mapping]=None,
+      headers: Optional[Mapping[int,Union[str,'Cell']]]=None,
+      max_rows: Optional[int]=None,
+      ranks: bool=True,
+      splitter: Optional[Callable[[Any],Sequence]]=None
+    ) -> 'Table':
     """Create a Table from a dict mapping values to counts of how often each value occurs.
     This automatically sorts them by frequency, calculates the total and the percent of it each
     count represents, and formats everything for readability.
@@ -257,14 +265,14 @@ class Table(Styled):
       and so on. This indexing is the same ("values" is still 1) if the ranks column is omitted.
     `max_rows`: Only show the top `max_rows` values.
     `ranks`: Whether to show the "ranks" column (True) or not (False).
+    `splitter`: A function which will turn any of the values (`freqs` keys) into multiple columns.
+      It should take a key from `freqs` and return a sequence of values, dicts, or Cells (the same
+      format as a row you'd give to Table).
     """
     if labels is None:
       labels = {}
     if headers is None:
       headers = {}
-    for i, default_header in enumerate(('', 'Value', 'Count', 'Percent')):
-      if i not in headers:
-        headers[i] = default_header
     all_items = sorted(freqs.items(), key=lambda item: (-item[1], item[0]))
     total = sum([row[1] for row in all_items])
     if max_rows is not None and len(all_items) > max_rows:
@@ -278,6 +286,7 @@ class Table(Styled):
       max_round_to = max(max_round_to, get_round_to(100*count/total, 1))
     format_str = f'{{:0.{max_round_to}f}} %'
     rows = []
+    labels_len = None
     for row_num, (value, count) in enumerate(items, 1):
       pct = 100*count/total
       if int(pct) == pct:
@@ -286,8 +295,19 @@ class Table(Styled):
       else:
         pct_str = format_str.format(pct)
         align = 'right'
-      label = labels.get(value, value)
-      row = [label, {'value':f'{count:,}', 'align':'right'}, {'value':pct_str, 'align':align}]
+      if splitter is None:
+        labels = [labels.get(value, value)]
+        labels_len = 1
+      else:
+        labels = list(splitter(value))
+        this_labels_len = len(labels)
+        if labels_len is None:
+          labels_len = this_labels_len
+        elif this_labels_len != labels_len:
+          raise ValueError(
+            f'Splitter returned inconsistent number of columns ({labels_len} != {this_labels_len})'
+          )
+      row = labels + [{'value':f'{count:,}', 'align':'right'}, {'value':pct_str, 'align':align}]
       if ranks:
         row = [row_num] + row
       rows.append(row)
@@ -297,12 +317,20 @@ class Table(Styled):
     if ranks:
       summary = [''] + summary
     rows.append(summary)
-    header = [
-      headers[1], {'value':headers[2], 'align':'right'}, {'value':headers[3], 'align':'right'}
-    ]
-    if ranks:
-      header = [headers[0]] + header
-    return cls(rows, header=header)
+    # Determine the headers row.
+    default_headers = {
+      0:'', 1:{'value':'Value', 'width':labels_len},
+      1+labels_len:{'value':'Count', 'align':'right'},
+      2+labels_len:{'value':'Percent', 'align':'right'}
+    }
+    for i, header_cell in default_headers.items():
+      if i not in headers:
+        headers[i] = header_cell
+    headers_row = []
+    for i, header_cell in sorted(headers.items(), key=lambda item: item[0]):
+      if i != 0 or ranks:
+        headers_row.append(header_cell)
+    return cls(rows, header=headers_row)
 
 
 class ListLike:
