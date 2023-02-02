@@ -253,7 +253,8 @@ class Table(Styled):
       headers: Optional[Mapping[int,Union[str,'Cell']]]=None,
       max_rows: Optional[int]=None,
       ranks: bool=True,
-      splitter: Optional[Callable[[Any],Sequence]]=None
+      splitter: Optional[Callable[[Any],Sequence]]=None,
+      order: Sequence=()
     ) -> 'Table':
     """Create a Table from a dict mapping values to counts of how often each value occurs.
     This automatically sorts them by frequency, calculates the total and the percent of it each
@@ -268,12 +269,19 @@ class Table(Styled):
     `splitter`: A function which will turn any of the values (`freqs` keys) into multiple columns.
       It should take a key from `freqs` and return a sequence of values, dicts, or Cells (the same
       format as a row you'd give to Table).
+    `order`: A custom order to sort the rows by, instead of sorting them by frequency. Give a list
+      of values matching the keys in the `freqs` argument, in the order they should be displayed.
+      Not all keys in `freqs` must be given. Those omitted will be put after those included.
     """
     if labels is None:
       labels = {}
     if headers is None:
       headers = {}
     all_items = sorted(freqs.items(), key=lambda item: (-item[1], item[0]))
+    if order:
+      keys = all_items.keys()
+      reordered_keys = partially_order(keys, order)
+      all_items = {key:freqs[key] for key in reordered_keys}
     total = sum([row[1] for row in all_items])
     if max_rows is not None and len(all_items) > max_rows:
       items = all_items[:max_rows]
@@ -744,3 +752,23 @@ def get_round_to(num, decimals):
         return decimals - 1 - math.floor(log)
     else:
         return decimals
+
+
+def partially_order(unordered, order):
+  """Sort a list according to a given order.
+  The given order doesn't have to be comprehensive. Any elements in the input list that aren't in
+  the `order` list will be put at the end of the output list, in the same order as they appear in
+  the input.
+  NOTE: The elements must be hashable, and cannot appear repeatedly in the list. So this is ideal
+  for sorting identifiers or dictionary keys."""
+  ordered = []
+  ordered_set = set()
+  input_set = set(unordered)
+  for element in order:
+    if element in input_set:
+      ordered.append(element)
+      ordered_set.add(element)
+  for element in unordered:
+    if element not in ordered_set:
+      ordered.append(element)
+  return ordered
