@@ -281,7 +281,7 @@ class Table(Styled):
     if order:
       keys = [item[0] for item in all_items]
       reordered_keys = partially_order(keys, order)
-      all_items = {key:freqs[key] for key in reordered_keys}
+      all_items = [(key,freqs[key]) for key in reordered_keys]
     total = sum([row[1] for row in all_items])
     if max_rows is not None and len(all_items) > max_rows:
       items = all_items[:max_rows]
