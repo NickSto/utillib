@@ -279,7 +279,7 @@ class Table(Styled):
       headers = {}
     all_items = sorted(freqs.items(), key=lambda item: (-item[1], item[0]))
     if order:
-      keys = all_items.keys()
+      keys = [item[0] for item in all_items]
       reordered_keys = partially_order(keys, order)
       all_items = {key:freqs[key] for key in reordered_keys}
     total = sum([row[1] for row in all_items])
