@@ -296,18 +296,18 @@ class Table(Styled):
         pct_str = format_str.format(pct)
         align = 'right'
       if splitter is None:
-        labels = [labels.get(value, value)]
+        label_cells = [labels.get(value, value)]
         labels_len = 1
       else:
-        labels = list(splitter(value))
-        this_labels_len = len(labels)
+        label_cells = list(splitter(value))
+        this_labels_len = len(label_cells)
         if labels_len is None:
           labels_len = this_labels_len
         elif this_labels_len != labels_len:
           raise ValueError(
             f'Splitter returned inconsistent number of columns ({labels_len} != {this_labels_len})'
           )
-      row = labels + [{'value':f'{count:,}', 'align':'right'}, {'value':pct_str, 'align':align}]
+      row = label_cells + [{'value':f'{count:,}', 'align':'right'}, {'value':pct_str, 'align':align}]
       if ranks:
         row = [row_num] + row
       rows.append(row)
