@@ -6,6 +6,9 @@ import pathlib
 import sys
 import yaml
 
+YAML_EXTS = ('yaml', 'yml')
+MD_EXT = 'md'
+
 # Looks like https://pypi.org/project/frontmatter/ can already do this?
 def parse(lines, parse_yaml=True):
   content_lines = []
@@ -53,9 +56,12 @@ def make_argparser():
     help='Omit the graymatter and just print the content.')
   options.add_argument('-k', '--key',
     help='Just print the value of this key from the metadata.')
+  options.add_argument('-q', '--query',
+    help='A jq-like query. This differs from jq in that you can only specify keys and indices, '
+      'but indices can contain spaces(!)')
   options.add_argument('-v', '--value',
-    help='Print files where the value of --key matches this. Only valid with --find and --key. '
-      'The metadata value will be converted to a str before comparison.')
+    help='Print files where the value of --key or --query matches this. Only valid with --find and '
+      '--key or --query. The metadata value will be converted to a str before comparison.')
   options.add_argument('-E', '--ignore-empty', action='store_true',
     help='When using --find --key (with no --value), ignore files which contain the --key but '
       "with no value (the value is None or ''). For example: `title: ` or `date: ''`.")
@@ -72,16 +78,20 @@ def make_argparser():
     help='When extracting data (e.g. not using --find or --validate), prepend with the filename, '
       'like the default grep -R output. Except this will separate the filename from the data with '
       'reliable tab character instead of a colon.')
-  options.add_argument('-e', '--ext', default='md',
-    help='Markdown file extension. For input paths which are directories, only examine files with'
-      'this file extension (case-insensitive). Default: %(default)s')
+  options.add_argument('-e', '--ext',
+    help='File extension of input files. For input paths which are directories, only examine files '
+      'with this file extension (case-insensitive). Default: '+repr(MD_EXT))
+  options.add_argument('-F', '--format', choices=('gray', 'yaml'),
+    help='Whether the input files are Markdown files with YAML in graymatter headers ("gray") or '
+      'Pure yaml ("yaml") with no Markdown. In the latter case, this treats the entire file as the '
+      'YAML content, without requiring the --- fences.')
   options.add_argument('-h', '--help', action='help',
     help='Print this argument help text and exit.')
   logs = parser.add_argument_group('Logging')
   logs.add_argument('-L', '--log', type=argparse.FileType('w'), default=sys.stderr,
     help='Print log messages to this file instead of to stderr. Warning: Will overwrite the file.')
   volume = logs.add_mutually_exclusive_group()
-  volume.add_argument('-q', '--quiet', dest='volume', action='store_const', const=logging.CRITICAL,
+  volume.add_argument('-Q', '--quiet', dest='volume', action='store_const', const=logging.CRITICAL,
     default=logging.WARNING)
   volume.add_argument('--verbose', dest='volume', action='store_const', const=logging.INFO)
   volume.add_argument('-D', '--debug', dest='volume', action='store_const', const=logging.DEBUG)
@@ -93,19 +103,27 @@ def main(argv):
   args = parser.parse_args(argv[1:])
   logging.basicConfig(stream=args.log, level=args.volume, format='%(message)s')
 
-  parse_yaml = args.key or args.validate
+  parse_yaml = args.key or args.query or args.validate
+  ext = args.ext or MD_EXT
+
+  if args.query:
+    query = parse_query(args.query)
+  elif args.key:
+    query = parse_query('.'+args.key)
+  else:
+    query = None
 
   # Compile the list of files to examine.
-  md_files = expand_paths(args.inputs, args.ext)
-  single_file = len(md_files) == 1
+  input_paths = expand_paths(args.inputs, ext)
+  single_file = len(input_paths) == 1
   # If we're just examining a single file, the default verbosity should be INFO.
   if single_file and args.volume == logging.WARNING:
     logging.getLogger().setLevel(logging.INFO)
 
   # Process each file.
-  for md_path in md_files:
+  for input_path in input_paths:
     # Parse contents.
-    metadata, content, error = parse_contents(md_path, parse_yaml=parse_yaml)
+    metadata, content, error = parse_contents(input_path, parse_yaml=parse_yaml, format=args.format)
     if error:
       error: Exception
       if single_file:
@@ -113,7 +131,7 @@ def main(argv):
       elif args.validate and not args.find:
         # We're validating multiple files. Print the file and error.
         # If --find was given with --validate, we just want a list of files, not the full errors.
-        print(md_path)
+        print(input_path)
         print(f'  {type(error).__name__}: {error}')
         continue
     # Use the contents.
@@ -121,26 +139,26 @@ def main(argv):
       # If we're just --find-ing and listing matching files, check if this matches, print if it
       # does, then move on to the next file.
       is_match = file_matches(
-        metadata, args.key, args.value, args.meta, args.validate, error,
+        metadata, query, args.value, args.meta, args.validate, error,
         ignore_empty=args.ignore_empty
       )
       if (args.find_matches and is_match) or (not args.find_matches and not is_match):
-        print(md_path)
+        print(input_path)
       continue
-    elif args.key or args.meta or args.content:
+    elif query or args.meta or args.content:
       # Get the requested output and print it.
       try:
-        data = get_output(content, metadata, args.key, args.meta, args.content)
+        data = get_output(content, metadata, query, args.meta, args.content)
       except NoData:
         continue
       output = format_output(data, args.trim)
       if args.list_filename:
         if output == '':
           output = '\n'
-        output = f'{md_path}\t{output}'
+        output = f'{input_path}\t{output}'
       print(output, end='')
     elif not args.validate:
-      fail('Must provide at least one of --find, --validate, --key, --meta, or --content.')
+      fail('Must provide at least one of --find, --validate, --key, --query, --meta, or --content.')
 
 
 def expand_paths(input_paths, ext):
@@ -158,28 +176,42 @@ def expand_paths(input_paths, ext):
 
 
 def get_all_files(root_dir, ext=None):
-  if ext:
-    ext = '.'+ext
   for (dirpath_str, dirnames, filenames) in os.walk(root_dir):
     for name in filenames:
       path = pathlib.Path(dirpath_str,name)
       if not path.is_file():
         continue
-      if ext is None or path.suffix == ext:
+      if ext is None or path.suffix[1:] == ext:
         yield path
 
 
-def parse_contents(md_path, parse_yaml=True):
-  with md_path.open() as md_file:
+def parse_contents(input_path, parse_yaml=True, format=None):
+  format_ = get_format(input_path, format)
+  with input_path.open() as input_file:
     try:
-      metadata, content = parse(md_file, parse_yaml=parse_yaml)
+      if format_ == 'gray':
+        metadata, content = parse(input_file, parse_yaml=parse_yaml)
+      elif format_ == 'yaml':
+        content = ''
+        metadata = yaml.safe_load(input_file)
+      else:
+        raise ValueError(f'Invalid format {format_!r}')
     except (yaml.YAMLError, UnicodeDecodeError) as error:
       return None, None, error
     else:
       return metadata, content, None
 
 
-def file_matches(metadata, key, value, find_metadata, validate, error, ignore_empty=False):
+def get_format(path, format_):
+  if format_ is not None:
+    return format_
+  if path.suffix.lower()[1:] in YAML_EXTS:
+    return 'yaml'
+  # Default to graymatter
+  return 'gray'
+
+
+def file_matches(metadata, query, value, find_metadata, validate, error, ignore_empty=False):
   if validate:
     if error:
       return False
@@ -187,16 +219,16 @@ def file_matches(metadata, key, value, find_metadata, validate, error, ignore_em
       return True
   if metadata is None or metadata == '':
     logging.info('No metadata found.')
-    if key or value or find_metadata:
+    if query or value or find_metadata:
       return False
     else:
       return None
   elif find_metadata:
     return True
-  if key:
+  if query:
     try:
-      actual_value = metadata[key]
-    except KeyError:
+      actual_value = apply_query(metadata, query)
+    except NoData:
       return False
     if value is not None:
       if value == str(actual_value):
@@ -212,20 +244,20 @@ def file_matches(metadata, key, value, find_metadata, validate, error, ignore_em
       return True
 
 
-def get_output(content, metadata, key, get_metadata, get_content):
+def get_output(content, metadata, query, get_metadata, get_content):
   """Get the specified data from the file.
   If the data is not present (e.g. the requested key is not in the metadata), this will raise a
   NoData exception. This is necessary because we want `None` (and every other data type) to be a
   valid return value."""
-  if key:
+  if query:
     if metadata is None:
       logging.info('No metadata found.')
       raise NoData('No metadata.')
     try:
-      return metadata[key]
-    except KeyError:
-      logging.info(f'No key {key!r} found in the metadata.')
-      raise NoData('Requested key not present.')
+      return apply_query(metadata, query)
+    except NoData as error:
+      logging.info(error.message)
+      raise
   elif get_metadata:
     if metadata:
       return metadata
@@ -239,6 +271,58 @@ def get_output(content, metadata, key, get_metadata, get_content):
       'Illegal argument combination. '
       'Must provide at least one of `key`, `get_metadata`, or `get_content`.'
     )
+
+
+def apply_query(data, query):
+  if len(query) <= 0:
+    return data
+  step1 = query[0]
+  try:
+    child = data[step1['value']]
+  except (KeyError, IndexError, TypeError):
+    raise NoData(f'Query {format_query(query)!r} not found.') from None
+  except NoData as error:
+    error.args = (f'Query {format_query(query)!r} not found.',)
+    raise
+  return apply_query(child, query[1:])
+
+
+def parse_query(query_str):
+  dot_fields = query_str.split('.')
+  if dot_fields[0] != '':
+    raise ValueError(f'Invalid query string {query_str!r}: String must begin with a dot.')
+  query = []
+  for dot_field in dot_fields[1:]:
+    open_fields = dot_field.split('[')
+    if open_fields[0] != '':
+      step = {'type':'key', 'value':open_fields[0]}
+      query.append(step)
+    for open_field in open_fields[1:]:
+      if open_field.endswith(']'):
+        try:
+          index = int(open_field[:-1])
+        except ValueError:
+          raise ValueError(
+            f'Invalid query string {query_str!r}: List index must be an integer.'
+          ) from None
+        step = {'type':'index', 'value':index}
+        query.append(step)
+      else:
+        raise ValueError(f'Invalid query string {query_str!r}: Did not find closing bracket.')
+  return query
+
+
+def format_query(query):
+  query_str = ''
+  for step in query:
+    value = step['value']
+    if step['type'] == 'key':
+      query_str += '.'+value
+    elif step['type'] == 'index':
+      if query_str == '':
+        query_str = '.'
+      query_str += f'[{value}]'
+  return query_str
 
 
 def format_output(output, trim=False):
@@ -255,7 +339,9 @@ def format_output(output, trim=False):
 
 class NoData(RuntimeError):
   """The requested data was not found."""
-  pass
+  def __init__(self, message):
+    super().__init__(message)
+    self.message = message
 
 
 def fail(message, print_msg=True):
