@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
-import argparse
 import collections.abc
 import logging
 import math
-import pathlib
-import sys
 from typing import Any, Union, Optional, Callable, Sequence, Mapping, Generator, Iterable, Dict, List, Tuple, Set, cast
 try:
   from IPython.display import HTML
@@ -781,6 +778,11 @@ def partially_order(unordered, order):
   return ordered
 
 
+import argparse
+import pathlib
+import sys
+import tempfile
+
 DESCRIPTION = """Create formatted tables from text input."""
 
 def make_argparser():
@@ -794,6 +796,13 @@ def make_argparser():
   options.add_argument('-s', '--table-style', dest='table_styles', action='append',
     help='Add this CSS property:value pair to the <table> style attribute. The string will be '
       'added verbatim to the list of CSS rules. Give multiple times to add multiple rules.')
+  options.add_argument('-a', '--accumulate',
+    help='Store input between invocations for later output (with --dump). Give a unique id to tell '
+      'it which ongoing input to add this to.')
+  options.add_argument('-d', '--dump',
+    help='Output formatted table from input stored with --accumulate. Give the id of the '
+      'accumulated input you want to print. Note: This will delete the accumulated input, so it '
+      "can't be used more than once.")
   options.add_argument('-h', '--help', action='help',
     help='Print this argument help text and exit.')
   logs = parser.add_argument_group('Logging')
@@ -814,9 +823,26 @@ def main(argv):
 
   logging.basicConfig(stream=args.log, level=args.volume, format='%(message)s')
 
+  if args.dump:
+    temp_dir = get_temp_dir()
+    acc_path = temp_dir/f'acc.{args.dump}.txt'
+    input_stream = acc_path.open()
+  else:
+    input_stream = sys.stdin
+
+  if args.accumulate:
+    if args.dump:
+      fail('Cannot give both --accumulate and --dump.')
+    temp_dir = get_temp_dir()
+    acc_path = temp_dir/f'acc.{args.accumulate}.txt'
+    with acc_path.open('a') as acc_file:
+      for line in input_stream:
+        acc_file.write(line)
+    return
+
   header = []
   body = []
-  for row_num, fields in enumerate(parse_input(sys.stdin, delim=args.delim), 1):
+  for row_num, fields in enumerate(parse_input(input_stream, delim=args.delim), 1):
     cell_dicts = [{'value':value} for value in fields]
     if row_num <= args.headers:
       header.append(cell_dicts)
@@ -828,10 +854,40 @@ def main(argv):
 
   print(table.to_html())
 
+  if args.dump:
+    input_stream.close()
+    acc_path.unlink()
+
 
 def parse_input(stream, delim=None):
   for line in stream:
     yield line.rstrip('\r\n').split(sep=delim)
+
+
+def get_temp_dir():
+  with tempfile.NamedTemporaryFile() as temp_file:
+    temp_root = pathlib.Path(temp_file.name).parent
+  temp_dir = temp_root/'html-table-acc'
+  i = 1
+  while not is_temp_dir_availabile(temp_dir):
+    i += 1
+    temp_dir = temp_root/f'html-table-acc{i}'
+    if i >= 1000:
+      fail(f'Could not find available temporary directory (like {temp_dir})')
+  temp_dir.mkdir(mode=0o700, exist_ok=True)
+  return temp_dir
+
+
+def is_temp_dir_availabile(temp_dir):
+  """Does it look like the directory is already in use by a different program?"""
+  if not temp_dir.exists():
+    return True
+  if not temp_dir.is_dir():
+    return False
+  for child_path in temp_dir.iterdir():
+    if not (child_path.name.startswith('acc.') and child_path.name.endswith('.txt')):
+      return False
+  return True
 
 
 def fail(message):
