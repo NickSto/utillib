@@ -1,5 +1,10 @@
+#!/usr/bin/env python3
+import argparse
 import collections.abc
+import logging
 import math
+import pathlib
+import sys
 from typing import Any, Union, Optional, Callable, Sequence, Mapping, Generator, Iterable, Dict, List, Tuple, Set, cast
 try:
   from IPython.display import HTML
@@ -273,6 +278,8 @@ class Table(Styled):
       of values matching the keys in the `freqs` argument, in the order they should be displayed.
       Not all keys in `freqs` must be given. Those omitted will be put after those included.
     """
+    if len(freqs) < 1:
+      raise ValueError('Frequency dict is empty!')
     if labels is None:
       labels = {}
     if headers is None:
@@ -772,3 +779,71 @@ def partially_order(unordered, order):
     if element not in ordered_set:
       ordered.append(element)
   return ordered
+
+
+DESCRIPTION = """Create formatted tables from text input."""
+
+def make_argparser():
+  parser = argparse.ArgumentParser(add_help=False, description=DESCRIPTION)
+  options = parser.add_argument_group('Options')
+  options.add_argument('-H', '--header', dest='headers', action='store_const', const=1, default=0,
+    help='The first input row is a header.')
+  options.add_argument('--headers', type=int,
+    help='How many header rows there are in the input.')
+  options.add_argument('-t', '--tabs', dest='delim', action='store_const', const='\t')
+  options.add_argument('-s', '--table-style', dest='table_styles', action='append',
+    help='Add this CSS property:value pair to the <table> style attribute. The string will be '
+      'added verbatim to the list of CSS rules. Give multiple times to add multiple rules.')
+  options.add_argument('-h', '--help', action='help',
+    help='Print this argument help text and exit.')
+  logs = parser.add_argument_group('Logging')
+  logs.add_argument('-l', '--log', type=argparse.FileType('w'), default=sys.stderr,
+    help='Print log messages to this file instead of to stderr. Warning: Will overwrite the file.')
+  volume = logs.add_mutually_exclusive_group()
+  volume.add_argument('-q', '--quiet', dest='volume', action='store_const', const=logging.CRITICAL,
+    default=logging.WARNING)
+  volume.add_argument('-v', '--verbose', dest='volume', action='store_const', const=logging.INFO)
+  volume.add_argument('-D', '--debug', dest='volume', action='store_const', const=logging.DEBUG)
+  return parser
+
+
+def main(argv):
+
+  parser = make_argparser()
+  args = parser.parse_args(argv[1:])
+
+  logging.basicConfig(stream=args.log, level=args.volume, format='%(message)s')
+
+  header = []
+  body = []
+  for row_num, fields in enumerate(parse_input(sys.stdin, delim=args.delim), 1):
+    cell_dicts = [{'value':value} for value in fields]
+    if row_num <= args.headers:
+      header.append(cell_dicts)
+    else:
+      body.append(cell_dicts)
+
+  table = Table(body, header=header)
+  table.css = args.table_styles
+
+  print(table.to_html())
+
+
+def parse_input(stream, delim=None):
+  for line in stream:
+    yield line.rstrip('\r\n').split(sep=delim)
+
+
+def fail(message):
+  logging.critical(f'Error: {message}')
+  if __name__ == '__main__':
+    sys.exit(1)
+  else:
+    raise Exception(message)
+
+
+if __name__ == '__main__':
+  try:
+    sys.exit(main(sys.argv))
+  except BrokenPipeError:
+    pass
