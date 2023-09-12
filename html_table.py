@@ -325,7 +325,8 @@ class Table(Styled):
       rows.append(row)
     if trunc:
       rows.append([{'value':'...', 'width':3, 'align':'center'}])
-    summary = ['(Total)', {'value':f'{total:,}', 'align':'right'}, format_str.format(100)]
+    blanks = [''] * (labels_len-1)
+    summary = ['(Total)', *blanks, {'value':f'{total:,}', 'align':'right'}, format_str.format(100)]
     if ranks:
       summary = [''] + summary
     rows.append(summary)
@@ -342,7 +343,7 @@ class Table(Styled):
     for i, header_cell in sorted(headers.items(), key=lambda item: item[0]):
       if i != 0 or ranks:
         headers_row.append(header_cell)
-    return cls(rows, header=headers_row)
+    return cls(rows, header=[headers_row])
 
 
 class ListLike:
@@ -751,6 +752,8 @@ def is_number(value: Any) -> bool:
 
 
 def get_round_to(num, decimals):
+    if num == 0:
+      return decimals
     log = math.log10(num)
     if num < 1:
         return decimals - 1 - math.floor(log)
