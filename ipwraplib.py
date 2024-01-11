@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """These functions are some simple wrappers for unix commands that query info
 from the OS like wifi SSIDs, MAC addresses, DNS queries, etc."""
+from __future__ import print_function
 import os
 import re
 import sys
@@ -33,7 +34,7 @@ def get_wifi_info():
   # Call iwconfig.
   devnull = open(os.devnull, 'w')
   try:
-    output = subprocess.check_output([iwconfig_cmd], stderr=devnull)
+    output = subprocess.check_output([iwconfig_cmd], encoding='utf8', stderr=devnull)
   except (OSError, subprocess.CalledProcessError):
     return (None, None, None)
   finally:
@@ -260,7 +261,7 @@ def main(argv):
   if args.list:
     for (name, obj) in globals().items():
       if hasattr(obj, '__call__') and name != 'main':
-        print signature(obj)
+        print(signature(obj))
     return 0
 
   if not args.function:
@@ -275,16 +276,16 @@ def main(argv):
     obj = globals_dict[args.function]
     if hasattr(obj, '__call__'):
       if args.docstring:
-        print 'def '+signature(obj)+':'
+        print('def '+signature(obj)+':')
         if obj.__doc__:
-          print '  """'+obj.__doc__+'"""'
+          print('  """'+obj.__doc__+'"""')
         return 0
       output = obj(*args.arg)
       if isinstance(output, list):
         for item in output:
-          print item
+          print(item)
       elif output is not None:
-        print output
+        print(output)
     else:
       fail('Error: "'+args.function+'" not a function.')
   else:
