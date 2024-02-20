@@ -30,22 +30,22 @@ time (default is """+str(DEFAULT_CHUNK_SIZE)+').')
       pass
 
   if hashtype == 'crc32' or hashtype == 'crc':
-    print(crc32(filename, chunk_size=chunk_size))
+    print(crc32file(filename, chunk_size=chunk_size))
   else:
     print(hashfile(filename, hashtype, chunk_size=chunk_size))
 
   return 0
 
 
-def crc32(filename: Union[str, pathlib.Path], chunk_size: int=DEFAULT_CHUNK_SIZE) -> str:
-  crc = crc32_int(filename, chunk_size=chunk_size)
+def crc32file(filename: Union[str, pathlib.Path], chunk_size: int=DEFAULT_CHUNK_SIZE) -> str:
+  crc = crc32file_int(filename, chunk_size=chunk_size)
   if crc >= 0:
     return hex(crc)[2:]
   else:
     return '-'+hex(crc)[3:]
 
 
-def crc32_int(filename: Union[str, pathlib.Path], chunk_size: int=DEFAULT_CHUNK_SIZE) -> str:
+def crc32file_int(filename: Union[str, pathlib.Path], chunk_size: int=DEFAULT_CHUNK_SIZE) -> str:
   """Read a file and compute its CRC-32. Only reads chunk_size bytes into memory
   at a time."""
   crc = 0
@@ -63,17 +63,29 @@ def crc32_int(filename: Union[str, pathlib.Path], chunk_size: int=DEFAULT_CHUNK_
   return crc
 
 
+def crc32str(data: str) -> str:
+  crc = crc32data(data.encode('utf-8'))
+  if crc >= 0:
+    return hex(crc)[2:]
+  else:
+    return '-'+hex(crc)[3:]
+
+
+def crc32data(data: bytes) -> int:
+  return zlib.crc32(data)
+
+
 def hashfile(
     filepath: Union[str, pathlib.Path], hash_name: str, chunk_size: int=DEFAULT_CHUNK_SIZE
   ) -> str:
   if hash_name not in hashlib.algorithms_available:
     raise ValueError(f'Hash algorithm {hash_name!r} not recognized.')
   hasher = hashlib.new(hash_name)
-  digest = hash_with_hasher(filepath, hasher, chunk_size=chunk_size)
+  digest = hashfile_with_hasher(filepath, hasher, chunk_size=chunk_size)
   return digest.hex()
 
 
-def hash_with_hasher(
+def hashfile_with_hasher(
     filepath: Union[str, pathlib.Path], hasher: hashlib._hashlib.HASH,
     chunk_size: int=DEFAULT_CHUNK_SIZE
   ) -> bytes:
@@ -82,6 +94,19 @@ def hash_with_hasher(
     while chunk:
       hasher.update(chunk)
       chunk = filehandle.read(chunk_size)
+  return hasher.digest()
+
+
+def hashstr(data: str, hash_name: str) -> str:
+  if hash_name not in hashlib.algorithms_available:
+    raise ValueError(f'Hash algorithm {hash_name!r} not recognized.')
+  hasher = hashlib.new(hash_name)
+  digest = hashdata(data.encode('utf-8'), hasher)
+  return digest.hex()
+
+
+def hashdata(data: bytes, hasher: hashlib._hashlib.HASH) -> int:
+  hasher.update(data)
   return hasher.digest()
 
 
