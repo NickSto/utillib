@@ -1,16 +1,15 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """These functions are some simple wrappers for unix commands that query info
 from the OS like wifi SSIDs, MAC addresses, DNS queries, etc."""
-from __future__ import print_function
 import os
 import re
 import sys
 import errno
+import shutil
 import socket
 import inspect
 import argparse
 import subprocess
-import distutils.spawn
 
 
 def get_wifi_info():
@@ -26,15 +25,14 @@ def get_wifi_info():
   iwconfig_cmd = 'iwconfig'
   # Check if iwconfig command is available. If not, fall back to the common absolute path
   # /sbin/iwconfig. If this doesn't exist, subprocess will return an OSError anyway.
-  # Note: distutils.spawn.find_executable() fails with an exception if there is no $PATH defined.
-  # So we'll check first for that scenario. (I've actually seen this, for instance in the
-  # environment NetworkManager sets up for scripts in /etc/NetworkManager/dispatcher.d/.
-  if 'PATH' not in os.environ or not distutils.spawn.find_executable(iwconfig_cmd):
+  # Note: There is no `$PATH` in some environments, like the one NetworkManager sets up for scripts
+  # in /etc/NetworkManager/dispatcher.d/
+  if not shutil.which(iwconfig_cmd):
     iwconfig_cmd = '/sbin/iwconfig'
   # Call iwconfig.
   devnull = open(os.devnull, 'w')
   try:
-    output = subprocess.check_output([iwconfig_cmd], encoding='utf8', stderr=devnull)
+    output = subprocess.check_output([iwconfig_cmd], text=True, stderr=devnull)
   except (OSError, subprocess.CalledProcessError):
     return (None, None, None)
   finally:
@@ -69,12 +67,12 @@ def get_default_route(to='8.8.8.8'):
   interface = None
   ip_cmd = 'ip'
   # Check if 'ip' command is available. If not, fall back to common absolute path.
-  if 'PATH' not in os.environ or not distutils.spawn.find_executable(ip_cmd):
+  if not shutil.which(ip_cmd):
     ip_cmd = '/sbin/ip'
   # Call 'ip route get [ip]'.
   devnull = open(os.devnull, 'w')
   try:
-    output = subprocess.check_output([ip_cmd, 'route', 'get', to], stderr=devnull)
+    output = subprocess.check_output((ip_cmd, 'route', 'get', to), text=True, stderr=devnull)
   except (OSError, subprocess.CalledProcessError):
     return (None, None)
   finally:
@@ -91,9 +89,12 @@ def get_default_route(to='8.8.8.8'):
     if fields[1] == 'via' and fields[3] == 'dev' and fields[5] == 'src':
       ip = fields[6]
       interface = fields[4]
-    elif fields[1] == 'dev' and fields[3] == 'src':
-      ip = fields[4]
+    elif fields[1] == 'dev':
       interface = fields[2]
+      if fields[3] == 'src':
+        ip = fields[4]
+      elif fields[5] == 'src':
+        ip = fields[6]
     if ip is not None and interface is not None:
       if re.search(r'^[0-9\.]{7,15}$', ip):
         break
@@ -108,12 +109,12 @@ def dig_ip(domain):
   On error, or no result, returns None."""
   ip = None
   dig_cmd = 'dig'
-  if 'PATH' not in os.environ or not distutils.spawn.find_executable(dig_cmd):
+  if not shutil.which(dig_cmd):
     dig_cmd = '/usr/bin/dig'
   devnull = open(os.devnull, 'w')
+  cmd = (dig_cmd, '+short', '+time=1', '+tries=2', domain)
   try:
-    output = subprocess.check_output([dig_cmd, '+short', '+time=1', '+tries=2', domain],
-                                     stderr=devnull)
+    output = subprocess.check_output(cmd, text=True, stderr=devnull)
   except (OSError, subprocess.CalledProcessError):
     return None
   finally:
@@ -159,8 +160,9 @@ def get_arp_table(proc_path='/proc/net/arp'):
         flags = int(flags, 16)
       except ValueError:
         continue
-      table[ip] = {'ip':ip, 'hwtype':hwtype, 'flags':flags, 'mac':mac, 'mask':mask,
-                   'interface':interface}
+      table[ip] = {
+        'ip':ip, 'hwtype':hwtype, 'flags':flags, 'mac':mac, 'mask':mask, 'interface':interface
+      }
   return table
 
 
